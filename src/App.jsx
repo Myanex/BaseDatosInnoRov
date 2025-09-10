@@ -4,6 +4,7 @@ import Catalogos from './Catalogos.jsx'
 import EmpresasCentros from './EmpresasCentros.jsx'
 import UsuariosAdmin from './UsuariosAdmin.jsx'
 import ReportesBitacora from './ReportesBitacora.jsx'
+import Inventario from './Inventario.jsx'
 
 // estilos simples
 const btn  = { padding: '8px 12px', border: '1px solid #bbb', borderRadius: 8, cursor: 'pointer' }
@@ -144,6 +145,15 @@ export default function App() {
               Panel
             </button>
 
+            {['admin','oficina'].includes(profile?.rol) && (
+              <button
+                style={{ ...btn, background: view === 'inventario' ? '#f5f5f5' : 'white' }}
+                onClick={() => setView('inventario')}
+              >
+                Inventario
+              </button>
+            )}
+
             {isAdmin && (
               <>
                 <button
@@ -190,6 +200,10 @@ export default function App() {
             <Catalogos profile={profile} />
           )}
 
+          {view === 'inventario' && ['admin','oficina'].includes(profile?.rol) && (
+            <Inventario profile={profile} />
+          )}
+          
           {view === 'empresas' && isAdmin && (
             <EmpresasCentros profile={profile} />
           )}
