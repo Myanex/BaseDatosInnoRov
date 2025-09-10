@@ -9,28 +9,42 @@ const input = { padding:8, border:'1px solid #bbb', borderRadius:8 }
 export default function UsuariosAdmin() {
   const [createMsg, setCreateMsg] = useState('')
   const [trMsg, setTrMsg] = useState('')
+  const [empresas, setEmpresas] = useState([])
+  const [zonas, setZonas] = useState([])
   const [centros, setCentros] = useState([])
+  const [empresaSel, setEmpresaSel] = useState('')
+  const [zonaSel, setZonaSel] = useState('')
   const [centroSel, setCentroSel] = useState('')
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('centros').select('id, nombre, empresa_id').order('nombre')
-      setCentros(data || [])
-      if (data?.length) setCentroSel(data[0].id)
-    })()
-  }, [])
+  useEffect(() => { (async () => {
+    const { data } = await supabase.from('empresas').select('id, nombre').order('nombre')
+    setEmpresas(data || []); if (data?.length) setEmpresaSel(data[0].id)
+  })()}, [])
+
+  useEffect(() => { (async () => {
+    if (!empresaSel) { setZonas([]); setZonaSel(''); return }
+    const { data } = await supabase.from('zonas').select('id, nombre').eq('empresa_id', empresaSel).order('nombre')
+    setZonas(data || []); setZonaSel(data?.[0]?.id || '')
+  })()}, [empresaSel])
+
+  useEffect(() => { (async () => {
+    if (!zonaSel) { setCentros([]); setCentroSel(''); return }
+    const { data } = await supabase.from('centros').select('id, nombre').eq('zona_id', zonaSel).order('nombre')
+    setCentros(data || []); setCentroSel(data?.[0]?.id || '')
+  })()}, [zonaSel])
 
   const crear = async () => {
     setCreateMsg('')
+    if (!centroSel) return setCreateMsg('Selecciona centro')
     const body = {
       nombre: document.getElementById('nuNombre').value.trim(),
-      email: document.getElementById('nuEmail').value.trim(),
-      rutBody: document.getElementById('nuRut').value.trim(),
-      rol: document.getElementById('nuRol').value,
+      email:  document.getElementById('nuEmail').value.trim(),
+      rutBody:document.getElementById('nuRut').value.trim(),
+      rol:    document.getElementById('nuRol').value,
       centroId: centroSel
     }
     const res = await fetch('/api/admin/create-user', {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
     })
     const j = await res.json()
     setCreateMsg(j.error ? `❌ ${j.error}` : '✅ Usuario creado')
@@ -38,6 +52,7 @@ export default function UsuariosAdmin() {
 
   const transferir = async () => {
     setTrMsg('')
+    if (!centroSel) return setTrMsg('Selecciona centro')
     const userId = document.getElementById('trUserId').value.trim()
     const { error } = await supabase.rpc('rpc_transferir_usuario_definitivo', {
       p_user_id: userId, p_nuevo_centro_id: centroSel, p_fecha_inicio: null
@@ -58,8 +73,14 @@ export default function UsuariosAdmin() {
             <option value="oficina">oficina</option>
             <option value="admin">admin</option>
           </select>
+          <select style={input} value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)}>
+            {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          </select>
+          <select style={input} value={zonaSel} onChange={e=>setZonaSel(e.target.value)}>
+            {zonas.map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
+          </select>
           <select style={input} value={centroSel} onChange={e=>setCentroSel(e.target.value)}>
-            {centros.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            {centros.map(c=> <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
           <button style={btn} onClick={crear}>Crear usuario</button>
         </div>
@@ -70,8 +91,14 @@ export default function UsuariosAdmin() {
         <h3>Transferencia definitiva (RPC)</h3>
         <div style={row}>
           <input id="trUserId" style={input} placeholder="user_id a transferir" />
+          <select style={input} value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)}>
+            {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          </select>
+          <select style={input} value={zonaSel} onChange={e=>setZonaSel(e.target.value)}>
+            {zonas.map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
+          </select>
           <select style={input} value={centroSel} onChange={e=>setCentroSel(e.target.value)}>
-            {centros.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            {centros.map(c=> <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
           <button style={btn} onClick={transferir}>Transferir</button>
         </div>
@@ -80,4 +107,5 @@ export default function UsuariosAdmin() {
     </div>
   )
 }
+
 
