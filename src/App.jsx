@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient'
 import Catalogos from './Catalogos.jsx'
 import EmpresasCentros from './EmpresasCentros.jsx'
 import UsuariosAdmin from './UsuariosAdmin.jsx'
+import ReportesBitacora from './ReportesBitacora.jsx'
 
 // estilos simples
 const btn  = { padding: '8px 12px', border: '1px solid #bbb', borderRadius: 8, cursor: 'pointer' }
@@ -165,6 +166,12 @@ export default function App() {
                 >
                   Usuarios
                 </button>
+                <button
+                  style={{ ...btn, background: view === 'reportes' ? '#f5f5f5' : 'white' }}
+                  onClick={() => setView('reportes')}
+                  >
+                  Reportes
+                </button>
               </>
             )}
 
@@ -190,6 +197,9 @@ export default function App() {
           {view === 'usuarios' && isAdmin && (
             <UsuariosAdmin />
           )}
+
+          {view === 'reportes' && isAdmin && 
+            <ReportesBitacora />}
         </div>
       )}
     </main>
