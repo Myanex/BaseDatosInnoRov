@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Catalogos from './Catalogos.jsx'
+import EmpresasCentros from './EmpresasCentros.jsx'
 import UsuariosAdmin from './UsuariosAdmin.jsx'
 
-// estilos simples reutilizables
-const btn = { padding: '8px 12px', border: '1px solid #bbb', borderRadius: 8, cursor: 'pointer' }
+// estilos simples
+const btn  = { padding: '8px 12px', border: '1px solid #bbb', borderRadius: 8, cursor: 'pointer' }
 const card = { border: '1px solid #ddd', borderRadius: 12, padding: 16, maxWidth: 960 }
-const row = { display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }
+const row  = { display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loginMsg, setLoginMsg] = useState('')
   const [changeMsg, setChangeMsg] = useState('')
-  const [view, setView] = useState('panel') // panel | catalogos | usuarios
+  const [view, setView] = useState('panel') // panel | catalogos | empresas | usuarios
 
   // --- Sesión ---
   useEffect(() => {
@@ -22,9 +23,7 @@ export default function App() {
       if (!mounted) return
       setSession(data.session ?? null)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s)
-    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => {
       mounted = false
       sub.subscription.unsubscribe()
@@ -93,11 +92,11 @@ export default function App() {
     setChangeMsg('Contraseña actualizada. ✅')
   }
 
-  // --- Vistas / flags ---
-  const needLogin = !session
+  // --- Flags de vista ---
+  const needLogin    = !session
   const needFirstRun = session && profile?.must_change_password
-  const readyPanel = session && profile && !profile.must_change_password
-  const isAdmin = profile?.rol === 'admin'
+  const readyPanel   = session && profile && !profile.must_change_password
+  const isAdmin      = profile?.rol === 'admin'
 
   return (
     <main style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial', margin: 24 }}>
@@ -130,7 +129,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Panel + navegación (solo cuando ya no requiere cambio de clave) */}
+      {/* Panel + navegación */}
       {readyPanel && (
         <div style={card}>
           <h2>Panel</h2>
@@ -152,6 +151,14 @@ export default function App() {
                 >
                   Catálogos
                 </button>
+
+                <button
+                  style={{ ...btn, background: view === 'empresas' ? '#f5f5f5' : 'white' }}
+                  onClick={() => setView('empresas')}
+                >
+                  Empresas/Centros
+                </button>
+
                 <button
                   style={{ ...btn, background: view === 'usuarios' ? '#f5f5f5' : 'white' }}
                   onClick={() => setView('usuarios')}
@@ -165,15 +172,19 @@ export default function App() {
             <button onClick={doLogout} style={btn}>Cerrar sesión</button>
           </div>
 
-          {/* Contenido */}
+          {/* Contenido por vista */}
           {view === 'panel' && (
             <div>
-              <p>Bienvenido. Usa las pestañas para navegar. Empecemos por <b>Catálogos</b> y luego <b>Usuarios</b>.</p>
+              <p>Bienvenido. Empieza por <b>Catálogos</b>, luego crea <b>Empresas/Centros</b> y finalmente <b>Usuarios</b>.</p>
             </div>
           )}
 
           {view === 'catalogos' && isAdmin && (
             <Catalogos profile={profile} />
+          )}
+
+          {view === 'empresas' && isAdmin && (
+            <EmpresasCentros profile={profile} />
           )}
 
           {view === 'usuarios' && isAdmin && (
@@ -184,6 +195,7 @@ export default function App() {
     </main>
   )
 }
+
 
    
 
