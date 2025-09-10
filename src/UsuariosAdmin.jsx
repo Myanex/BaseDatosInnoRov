@@ -10,36 +10,63 @@ export default function UsuariosAdmin() {
   const [createMsg, setCreateMsg] = useState('')
   const [trMsg, setTrMsg] = useState('')
 
+  // catálogos (se cargan solo si asignarCentro === true)
   const [empresas, setEmpresas] = useState([])
   const [zonas, setZonas] = useState([])
   const [centros, setCentros] = useState([])
 
+  // selección
+  const [rolSel, setRolSel] = useState('centro')
+  const [asignarCentro, setAsignarCentro] = useState(false)
+
   const [empresaSel, setEmpresaSel] = useState('')
   const [zonaSel, setZonaSel] = useState('')
-  const [centroSel, setCentroSel] = useState('')
+  const [centroSel, setCentroSel] = useState('') // si queda '', va EN RESERVA
 
-  const [rolSel, setRolSel] = useState('centro')
+  // ====== cargar combos SOLO cuando hace falta ======
+  useEffect(() => {
+    if (rolSel !== 'centro') {
+      setAsignarCentro(false)
+      // limpiar selecciones
+      setEmpresaSel(''); setZonaSel(''); setCentroSel('')
+      setEmpresas([]); setZonas([]); setCentros([])
+    }
+  }, [rolSel])
 
-  useEffect(() => { (async () => {
-    const { data } = await supabase.from('empresas').select('id, nombre').order('nombre')
-    setEmpresas(data || [])
-    if (data?.length) setEmpresaSel(data[0].id)
-  })() }, [])
+  useEffect(() => {
+    (async () => {
+      if (rolSel === 'centro' && asignarCentro) {
+        const { data } = await supabase.from('empresas').select('id, nombre').order('nombre')
+        setEmpresas(data || [])
+        // no selecciones automáticas: quedarán vacías si el user no elige nada
+        setEmpresaSel(''); setZonaSel(''); setCentroSel('')
+        setZonas([]); setCentros([])
+      } else {
+        setEmpresas([]); setZonas([]); setCentros([])
+        setEmpresaSel(''); setZonaSel(''); setCentroSel('')
+      }
+    })()
+  }, [asignarCentro, rolSel])
 
-  useEffect(() => { (async () => {
-    if (!empresaSel) { setZonas([]); setZonaSel(''); return }
-    const { data } = await supabase.from('zonas').select('id, nombre').eq('empresa_id', empresaSel).order('nombre')
-    setZonas(data || [])
-    setZonaSel(data?.[0]?.id || '')
-  })() }, [empresaSel])
+  useEffect(() => {
+    (async () => {
+      if (!asignarCentro || !empresaSel) { setZonas([]); setZonaSel(''); return }
+      const { data } = await supabase.from('zonas').select('id, nombre').eq('empresa_id', empresaSel).order('nombre')
+      setZonas(data || [])
+      setZonaSel(''); setCentros([]); setCentroSel('')
+    })()
+  }, [empresaSel, asignarCentro])
 
-  useEffect(() => { (async () => {
-    if (!zonaSel) { setCentros([]); setCentroSel(''); return }
-    const { data } = await supabase.from('centros').select('id, nombre').eq('zona_id', zonaSel).order('nombre')
-    setCentros(data || [])
-    setCentroSel(data?.[0]?.id || '')
-  })() }, [zonaSel])
+  useEffect(() => {
+    (async () => {
+      if (!asignarCentro || !zonaSel) { setCentros([]); setCentroSel(''); return }
+      const { data } = await supabase.from('centros').select('id, nombre').eq('zona_id', zonaSel).order('nombre')
+      setCentros(data || [])
+      setCentroSel('') // por defecto: reserva, hasta que elijan centro explícitamente
+    })()
+  }, [zonaSel, asignarCentro])
 
+  // ====== acciones ======
   const crear = async () => {
     setCreateMsg('')
     const nombre = document.getElementById('nuNombre').value.trim()
@@ -56,7 +83,8 @@ export default function UsuariosAdmin() {
         email,
         rutBody: rut,
         rol: rolSel,
-        centroId: (rolSel === 'centro' && centroSel) ? centroSel : null  // opcional
+        // Si NO asigna centro, va null => queda en RESERVA (sin empresa/zona)
+        centroId: (rolSel === 'centro' && asignarCentro && centroSel) ? centroSel : null
       }
 
       const res = await fetch('/api/admin/create-user', {
@@ -109,39 +137,65 @@ export default function UsuariosAdmin() {
             <option value="admin">admin</option>
           </select>
 
-          {/* Asignación opcional solo si rol = centro */}
+          {/* Toggle: Asignar centro ahora (solo para rol centro) */}
           {rolSel === 'centro' && (
-            <>
-              <select style={input} value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)}>
-                {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
-              </select>
-              <select style={input} value={zonaSel} onChange={e=>setZonaSel(e.target.value)}>
-                {zonas.map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
-              </select>
-              <select style={input} value={centroSel} onChange={e=>setCentroSel(e.target.value)}>
-                <option value="">(sin centro — reserva)</option>
-                {centros.map(c=> <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </>
+            <label style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+              <input
+                type="checkbox"
+                checked={asignarCentro}
+                onChange={(e)=>setAsignarCentro(e.target.checked)}
+              />
+              Asignar a un centro ahora
+            </label>
           )}
+        </div>
 
+        {/* Combos visibles SOLO si decidió asignar ahora */}
+        {rolSel === 'centro' && asignarCentro && (
+          <div style={{ ...row, marginTop:4 }}>
+            <select style={input} value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)}>
+              <option value="">(elige empresa)</option>
+              {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </select>
+
+            <select style={input} value={zonaSel} onChange={e=>setZonaSel(e.target.value)} disabled={!empresaSel}>
+              <option value="">{empresaSel ? '(elige zona)' : '(zona)'}</option>
+              {zonas.map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
+            </select>
+
+            <select style={input} value={centroSel} onChange={e=>setCentroSel(e.target.value)} disabled={!zonaSel}>
+              <option value="">(sin centro — reserva)</option>
+              {centros.map(c=> <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div style={row}>
           <button style={btn} onClick={crear}>Guardar</button>
         </div>
         <p>{createMsg}</p>
-        <p style={{fontSize:12, color:'#555'}}>Nota: Operario sin centro queda <b>en reserva</b>. Admin y Oficina no llevan centro asignado.</p>
+
+        <p style={{fontSize:12, color:'#555', marginTop:8}}>
+          Nota: Si <b>no</b> asignas centro, el operario queda <b>en reserva</b> (sin empresa ni zona).
+          Los roles <b>admin</b> y <b>oficina</b> nunca llevan centro/empresa/zona.
+        </p>
       </section>
 
       <section style={box}>
         <h3>Transferencia definitiva (RPC)</h3>
         <div style={row}>
           <input id="trUserId" style={input} placeholder="user_id a transferir" />
+          {/* Para transferir sí necesitas elegir destino */}
           <select style={input} value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)}>
+            <option value="">(empresa)</option>
             {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
-          <select style={input} value={zonaSel} onChange={e=>setZonaSel(e.target.value)}>
+          <select style={input} value={zonaSel} onChange={e=>setZonaSel(e.target.value)} disabled={!empresaSel}>
+            <option value="">(zona)</option>
             {zonas.map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
           </select>
-          <select style={input} value={centroSel} onChange={e=>setCentroSel(e.target.value)}>
+          <select style={input} value={centroSel} onChange={e=>setCentroSel(e.target.value)} disabled={!zonaSel}>
+            <option value="">(centro)</option>
             {centros.map(c=> <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
           <button style={btn} onClick={transferir}>Transferir</button>
@@ -151,6 +205,7 @@ export default function UsuariosAdmin() {
     </div>
   )
 }
+
 
 
 
