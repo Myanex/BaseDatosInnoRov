@@ -12,3 +12,4 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
    
+
