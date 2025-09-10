@@ -8,7 +8,6 @@ const SUPABASE_URL =
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Cliente con Service Role (solo en servidor)
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
 export default async function handler(req, res) {
@@ -20,7 +19,6 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
     const { nombre, email, rutBody, rol, centroId } = body
 
-    // Validaciones
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: 'Faltan variables SUPABASE en el servidor' })
     }
@@ -31,7 +29,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Rol inválido' })
     }
 
-    // 1) Crear usuario en Auth (clave = RUT sin DV)
+    // 1) Crear en Auth (clave = RUT sin DV)
     const { data: created, error: eCreate } = await admin.auth.admin.createUser({
       email,
       password: String(rutBody),
@@ -43,27 +41,29 @@ export default async function handler(req, res) {
     const user = created?.user
     if (!user?.id) return res.status(500).json({ error: 'No se obtuvo user.id' })
 
-    // 2) Insertar profile (en reserva por defecto: sin centro/empresa/zona)
+    // 2) Insertar en profiles (correo = email)  ← FIX
     const { error: eProfile } = await admin.from('profiles').insert({
       user_id: user.id,
       nombre,
       rut: String(rutBody),
       rol,
+      correo: email,                 // <<<<<<  IMPORTANTE
       must_change_password: true,
       is_active: true
-      // sin centro_id / empresa_id / zona_id
+      // sin empresa/zona/centro => queda EN RESERVA
     })
-    if (eProfile) return res.status(400).json({ error: eProfile.message })
 
-    // 3) Si es operario y trae centro, transferirlo (si no, queda en reserva)
+    if (eProfile) {
+      // limpieza para no dejar usuario “huérfano” en Auth
+      try { await admin.auth.admin.deleteUser(user.id) } catch {}
+      return res.status(400).json({ error: eProfile.message })
+    }
+
+    // 3) Si es operario y viene centro, transferir (si falla, devolvemos warning)
     if (rol === 'centro' && centroId) {
       const { error: eRpc } = await admin.rpc('rpc_transferir_usuario_definitivo', {
-        p_user_id: user.id,
-        p_nuevo_centro_id: centroId,
-        p_fecha_inicio: null
+        p_user_id: user.id, p_nuevo_centro_id: centroId, p_fecha_inicio: null
       })
-
-      // Si la RPC falla, no rompemos la creación; devolvemos warning
       if (eRpc) {
         return res.status(200).json({
           ok: true,
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, user_id: user.id })
   } catch (err) {
-    // Siempre devolver JSON para que el front no “falle al parsear”
     return res.status(500).json({ error: err?.message || String(err) })
   }
 }
+
