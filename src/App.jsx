@@ -3,12 +3,17 @@ import { supabase } from './supabaseClient'
 import Catalogos from './Catalogos.jsx'
 import UsuariosAdmin from './UsuariosAdmin.jsx'
 
+// estilos simples reutilizables
+const btn = { padding: '8px 12px', border: '1px solid #bbb', borderRadius: 8, cursor: 'pointer' }
+const card = { border: '1px solid #ddd', borderRadius: 12, padding: 16, maxWidth: 960 }
+const row = { display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loginMsg, setLoginMsg] = useState('')
   const [changeMsg, setChangeMsg] = useState('')
-  const [view, setView] = useState('panel') // panel | catalogos
+  const [view, setView] = useState('panel') // panel | catalogos | usuarios
 
   // --- Sesión ---
   useEffect(() => {
@@ -88,10 +93,7 @@ export default function App() {
     setChangeMsg('Contraseña actualizada. ✅')
   }
 
-  const [view, setView] = useState('panel') // panel | catalogos | usuarios
-  const isAdmin = profile?.rol === 'admin'
-
-  // --- Vistas ---
+  // --- Vistas / flags ---
   const needLogin = !session
   const needFirstRun = session && profile?.must_change_password
   const readyPanel = session && profile && !profile.must_change_password
@@ -103,7 +105,7 @@ export default function App() {
 
       {/* Login */}
       {needLogin && (
-        <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 16, maxWidth: 720 }}>
+        <div style={{ ...card, maxWidth: 720 }}>
           <h2>Iniciar sesión</h2>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
             <input id="email" type="email" placeholder="email" />
@@ -114,18 +116,9 @@ export default function App() {
         </div>
       )}
 
-      {isAdmin && (
-        <button
-          style={{ ...btn, background: view === 'usuarios' ? '#f5f5f5' : 'white' }}
-          onClick={() => setView('usuarios')}
-          >
-            Usuarios
-          </button>
-        )}
-
       {/* Primer inicio: cambio de contraseña */}
       {needFirstRun && (
-        <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 16, maxWidth: 720 }}>
+        <div style={{ ...card, maxWidth: 720 }}>
           <h2>Primer inicio — Cambiar contraseña</h2>
           <p>Debe ser distinta a tu RUT (cuerpo sin DV) y tener al menos 6 caracteres.</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
@@ -137,27 +130,37 @@ export default function App() {
         </div>
       )}
 
-      {/* Panel + navegación */}
+      {/* Panel + navegación (solo cuando ya no requiere cambio de clave) */}
       {readyPanel && (
-        <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 16, maxWidth: 960 }}>
+        <div style={card}>
           <h2>Panel</h2>
           <p>Hola <b>{profile?.nombre}</b> — rol: <b>{profile?.rol}</b></p>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }}>
+          <div style={row}>
             <button
               style={{ ...btn, background: view === 'panel' ? '#f5f5f5' : 'white' }}
               onClick={() => setView('panel')}
             >
               Panel
             </button>
+
             {isAdmin && (
-              <button
-                style={{ ...btn, background: view === 'catalogos' ? '#f5f5f5' : 'white' }}
-                onClick={() => setView('catalogos')}
-              >
-                Catálogos
-              </button>
+              <>
+                <button
+                  style={{ ...btn, background: view === 'catalogos' ? '#f5f5f5' : 'white' }}
+                  onClick={() => setView('catalogos')}
+                >
+                  Catálogos
+                </button>
+                <button
+                  style={{ ...btn, background: view === 'usuarios' ? '#f5f5f5' : 'white' }}
+                  onClick={() => setView('usuarios')}
+                >
+                  Usuarios
+                </button>
+              </>
             )}
+
             <div style={{ flex: 1 }} />
             <button onClick={doLogout} style={btn}>Cerrar sesión</button>
           </div>
@@ -165,22 +168,22 @@ export default function App() {
           {/* Contenido */}
           {view === 'panel' && (
             <div>
-              <p>Bienvenido. Usa las pestañas para navegar. Empecemos por <b>Catálogos</b> para cargar datos base.</p>
+              <p>Bienvenido. Usa las pestañas para navegar. Empecemos por <b>Catálogos</b> y luego <b>Usuarios</b>.</p>
             </div>
           )}
 
-          {view === 'usuarios' && isAdmin && <UsuariosAdmin/>}
-
           {view === 'catalogos' && isAdmin && (
             <Catalogos profile={profile} />
+          )}
+
+          {view === 'usuarios' && isAdmin && (
+            <UsuariosAdmin />
           )}
         </div>
       )}
     </main>
   )
 }
-
-const btn = { padding: '8px 12px', border: '1px solid #bbb', borderRadius: 8, cursor: 'pointer' }
 
    
 
