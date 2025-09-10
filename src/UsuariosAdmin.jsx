@@ -10,14 +10,14 @@ const thtd = { borderBottom:'1px solid #eee', padding:'6px 6px', textAlign:'left
 const chip = (ok) => ({ padding:'2px 8px', borderRadius:999, background: ok ? '#e6f6ed' : '#fde8e8', border:'1px solid #cfe9dc', fontSize:12 })
 
 export default function UsuariosAdmin() {
-  // Mensajes
+  // Mensajes globales
   const [createMsg, setCreateMsg] = useState('')
   const [trMsg, setTrMsg] = useState('')
   const [listMsg, setListMsg] = useState('')
 
-  // Catálogos (transferencia)
+  // Catálogos
   const [empresas, setEmpresas] = useState([])
-  const [zonas, setZonas] = useState([])
+  const [zonas, setZonas] = useState([])      // usados en bloque de transferencia
   const [centros, setCentros] = useState([])
 
   // Crear usuario
@@ -29,25 +29,33 @@ export default function UsuariosAdmin() {
 
   // Usuarios
   const [usuarios, setUsuarios] = useState([])
+  const [ubic, setUbic] = useState({}) // user_id -> {empresa, zona, centro, empresa_id, zona_id, centro_id}
   const [qUser, setQUser] = useState('')
-  const [userSel, setUserSel] = useState('') // para transferencia
-  const [rolDraft, setRolDraft] = useState({}) // user_id -> rol seleccionado
-  const [rowMsg, setRowMsg] = useState({})     // user_id -> msg por fila
+  const [userSel, setUserSel] = useState('') // transferencia
+  const [rolDraft, setRolDraft] = useState({}) // user_id -> rol
+  const [rowMsg, setRowMsg] = useState({})     // user_id -> mensaje por fila
 
-  // ===== cargas =====
+  // Asignación inline por fila (user_id -> {empresaId, zonaId, centroId, zonas:[], centros:[], abierto:bool})
+  const [rowAssign, setRowAssign] = useState({})
+
+  // ===== helpers catálogos =====
   const loadEmpresas = async () => {
     const { data } = await supabase.from('empresas').select('id, nombre').order('nombre')
     setEmpresas(data || [])
   }
-  const loadZonas = async (empresaId) => {
+  const fetchZonas = async (empresaId) => {
     const { data } = await supabase.from('zonas').select('id, nombre').eq('empresa_id', empresaId).order('nombre')
-    setZonas(data || [])
+    return data || []
   }
-  const loadCentros = async (zonaId) => {
+  const fetchCentros = async (zonaId) => {
     const { data } = await supabase.from('centros').select('id, nombre').eq('zona_id', zonaId).order('nombre')
-    setCentros(data || [])
+    return data || []
   }
 
+  const loadZonas = async (empresaId) => setZonas(await fetchZonas(empresaId))
+  const loadCentros = async (zonaId) => setCentros(await fetchCentros(zonaId))
+
+  // ===== usuarios + ubicaciones =====
   const loadUsuarios = async () => {
     setListMsg('')
     const { data, error } = await supabase
@@ -57,29 +65,33 @@ export default function UsuariosAdmin() {
       .order('nombre', { ascending: true })
     if (error) setListMsg('❌ ' + error.message)
     setUsuarios(data || [])
-    const d = {}
-    ;(data || []).forEach(u => { d[u.user_id] = u.rol })
-    setRolDraft(d)
-  }
-  useEffect(() => { loadUsuarios() }, [])
+    const d = {}; (data || []).forEach(u => { d[u.user_id] = u.rol }); setRolDraft(d)
 
-  // combos crear (solo si corresponde)
+    // ubicaciones actuales
+    const { data: u2 } = await supabase
+      .from('v_usuario_ubicacion_actual')
+      .select('user_id, empresa_id, empresa, zona_id, zona, centro_id, centro')
+    const m = {}
+    ;(u2 || []).forEach(r => { m[r.user_id] = r })
+    setUbic(m)
+  }
+
+  useEffect(() => { loadUsuarios(); loadEmpresas() }, [])
+
+  // ===== combos crear (solo si corresponde) =====
   useEffect(() => {
     if (rolSel !== 'centro') {
       setAsignarCentro(false)
       setEmpresaSel(''); setZonaSel(''); setCentroSel('')
-      setEmpresas([]); setZonas([]); setCentros([])
     }
   }, [rolSel])
 
   useEffect(() => { (async () => {
     if (rolSel === 'centro' && asignarCentro) {
-      await loadEmpresas()
+      setEmpresaSel(''); setZonaSel(''); setCentroSel('')
+    } else {
       setEmpresaSel(''); setZonaSel(''); setCentroSel('')
       setZonas([]); setCentros([])
-    } else {
-      setEmpresas([]); setZonas([]); setCentros([])
-      setEmpresaSel(''); setZonaSel(''); setCentroSel('')
     }
   })() }, [asignarCentro, rolSel])
 
@@ -117,7 +129,7 @@ export default function UsuariosAdmin() {
     } catch (err) { setCreateMsg(`❌ ${err.message || String(err)}`) }
   }
 
-  // ===== transferencia =====
+  // ===== transferencia (bloque) =====
   const transferir = async () => {
     setTrMsg('')
     if (!userSel) return setTrMsg('Elige el usuario a transferir')
@@ -126,6 +138,7 @@ export default function UsuariosAdmin() {
       p_user_id: userSel, p_nuevo_centro_id: centroSel, p_fecha_inicio: null
     })
     setTrMsg(error ? `❌ ${error.message}` : '✅ Transferido')
+    await loadUsuarios()
   }
 
   // ===== cambiar rol =====
@@ -140,6 +153,50 @@ export default function UsuariosAdmin() {
     else { setRowMsg(prev => ({ ...prev, [userId]: '✅ Rol actualizado' })); await loadUsuarios() }
   }
 
+  // ===== asignación inline por fila =====
+  const openAssign = async (userId) => {
+    const base = { empresaId:'', zonaId:'', centroId:'', zonas:[], centros:[], abierto:true }
+    setRowAssign(prev => ({ ...prev, [userId]: base }))
+  }
+
+  const pickEmpresa = async (userId, empresaId) => {
+    const zonas = empresaId ? await fetchZonas(empresaId) : []
+    setRowAssign(prev => ({
+      ...prev,
+      [userId]: { ...(prev[userId]||{}), empresaId, zonas, zonaId:'', centros:[], centroId:'' }
+    }))
+  }
+
+  const pickZona = async (userId, zonaId) => {
+    const centros = zonaId ? await fetchCentros(zonaId) : []
+    setRowAssign(prev => ({
+      ...prev,
+      [userId]: { ...(prev[userId]||{}), zonaId, centros, centroId:'' }
+    }))
+  }
+
+  const pickCentro = (userId, centroId) => {
+    setRowAssign(prev => ({ ...prev, [userId]: { ...(prev[userId]||{}), centroId } }))
+  }
+
+  const saveAssign = async (userId) => {
+    const s = rowAssign[userId]
+    if (!s?.centroId) return setRowMsg(prev => ({ ...prev, [userId]: 'Elige un centro' }))
+    const { error } = await supabase.rpc('rpc_transferir_usuario_definitivo', {
+      p_user_id: userId, p_nuevo_centro_id: s.centroId, p_fecha_inicio: null
+    })
+    if (error) setRowMsg(prev => ({ ...prev, [userId]: '❌ ' + error.message }))
+    else {
+      setRowMsg(prev => ({ ...prev, [userId]: '✅ Asignado' }))
+      setRowAssign(prev => ({ ...prev, [userId]: { ...(prev[userId]||{}), abierto:false } }))
+      await loadUsuarios()
+    }
+  }
+
+  const cancelAssign = (userId) => {
+    setRowAssign(prev => ({ ...prev, [userId]: { ...(prev[userId]||{}), abierto:false } }))
+  }
+
   // ===== listado/búsqueda =====
   const usuariosFiltrados = useMemo(() => {
     const q = qUser.trim().toLowerCase()
@@ -148,7 +205,14 @@ export default function UsuariosAdmin() {
       [u.nombre, u.correo, u.rut, u.rol].some(v => String(v||'').toLowerCase().includes(q))
     )
   }, [qUser, usuarios])
+
   const centrosOnly = useMemo(() => (usuarios || []).filter(u => u.rol === 'centro'), [usuarios])
+
+  const ubicStr = (u) => {
+    const r = ubic[u.user_id]
+    if (!r || !r.centro) return 'Reserva'
+    return `${r.empresa} / ${r.zona} / ${r.centro}`
+  }
 
   return (
     <div>
@@ -192,7 +256,7 @@ export default function UsuariosAdmin() {
         <div style={row}><button style={btn} onClick={crear}>Guardar</button></div>
         <p>{createMsg}</p>
         <p style={{fontSize:12, color:'#555', marginTop:8}}>
-          Nota: si <b>no</b> asignas centro, el operario queda <b>en reserva</b> (sin empresa/zona). Los roles <b>admin</b> y <b>oficina</b> nunca llevan centro.
+          Si <b>no</b> asignas centro, el operario queda <b>en reserva</b> (sin empresa/zona). Admin y oficina nunca llevan centro.
         </p>
       </section>
 
@@ -208,11 +272,11 @@ export default function UsuariosAdmin() {
               </option>
             ))}
           </select>
-          <select style={input} value={empresaSel} onChange={(e)=>setEmpresaSel(e.target.value)}>
+          <select style={input} value={empresaSel} onChange={(e)=>{setEmpresaSel(e.target.value); loadZonas(e.target.value)}}>
             <option value="">(empresa)</option>
             {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
-          <select style={input} value={zonaSel} onChange={(e)=>setZonaSel(e.target.value)} disabled={!empresaSel}>
+          <select style={input} value={zonaSel} onChange={(e)=>{setZonaSel(e.target.value); loadCentros(e.target.value)}} disabled={!empresaSel}>
             <option value="">(zona)</option>
             {zonas.map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
           </select>
@@ -242,54 +306,81 @@ export default function UsuariosAdmin() {
               <th style={thtd}>RUT</th>
               <th style={thtd}>Rol</th>
               <th style={thtd}>Estado</th>
+              <th style={thtd}>Ubicación actual</th>
               <th style={thtd}>Acciones</th>
               <th style={thtd}>Mensaje</th>
             </tr>
           </thead>
           <tbody>
-            {usuariosFiltrados.map(u => (
-              <tr key={u.user_id}>
-                <td style={thtd}>{u.nombre}</td>
-                <td style={thtd}>{u.correo}</td>
-                <td style={thtd}>{u.rut}</td>
-                <td style={thtd}>
-                  <select
-                    value={rolDraft[u.user_id] ?? u.rol}
-                    onChange={(e)=>setRolDraft(prev=>({ ...prev, [u.user_id]: e.target.value }))}
-                    style={input}
-                  >
-                    <option value="centro">centro</option>
-                    <option value="oficina">oficina</option>
-                    <option value="admin">admin</option>
-                  </select>
-                </td>
-                <td style={thtd}>
-                  <span style={chip(u.is_active)}>{u.is_active ? 'Activo' : 'Suspendido'}</span>
-                  {u.must_change_password ? <span style={{...chip(true), marginLeft:8}}>Debe cambiar clave</span> : null}
-                </td>
-                <td style={thtd}>
-                  <button
-                    style={btn}
-                    onClick={async ()=>{
-                      const { error } = await supabase.from('profiles').update({ is_active: !u.is_active }).eq('user_id', u.user_id)
-                      if (error) setRowMsg(prev=>({ ...prev, [u.user_id]: '❌ ' + error.message }))
-                      else { setRowMsg(prev=>({ ...prev, [u.user_id]: '✅ Estado actualizado' })); loadUsuarios() }
-                    }}
-                  >
-                    {u.is_active ? 'Suspender' : 'Activar'}
-                  </button>
-                  <button
-                    style={{...btn, marginLeft:8}}
-                    onClick={()=>updateRol(u.user_id)}
-                  >
-                    Actualizar rol
-                  </button>
-                </td>
-                <td style={thtd}>{rowMsg[u.user_id] || ''}</td>
-              </tr>
-            ))}
+            {usuariosFiltrados.map(u => {
+              const r = rowAssign[u.user_id] || {}
+              const abierto = !!r.abierto
+              return (
+                <tr key={u.user_id}>
+                  <td style={thtd}>{u.nombre}</td>
+                  <td style={thtd}>{u.correo}</td>
+                  <td style={thtd}>{u.rut}</td>
+                  <td style={thtd}>
+                    <select
+                      value={rolDraft[u.user_id] ?? u.rol}
+                      onChange={(e)=>setRolDraft(prev=>({ ...prev, [u.user_id]: e.target.value }))}
+                      style={input}
+                    >
+                      <option value="centro">centro</option>
+                      <option value="oficina">oficina</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </td>
+                  <td style={thtd}>
+                    <span style={chip(u.is_active)}>{u.is_active ? 'Activo' : 'Suspendido'}</span>
+                    {u.must_change_password ? <span style={{...chip(true), marginLeft:8}}>Debe cambiar clave</span> : null}
+                  </td>
+                  <td style={thtd}>{ubicStr(u)}</td>
+                  <td style={thtd}>
+                    <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+                      <button
+                        style={btn}
+                        onClick={async ()=>{
+                          const { error } = await supabase.from('profiles').update({ is_active: !u.is_active }).eq('user_id', u.user_id)
+                          if (error) setRowMsg(prev=>({ ...prev, [u.user_id]: '❌ ' + error.message }))
+                          else { setRowMsg(prev=>({ ...prev, [u.user_id]: '✅ Estado actualizado' })); loadUsuarios() }
+                        }}
+                      >
+                        {u.is_active ? 'Suspender' : 'Activar'}
+                      </button>
+
+                      <button style={{...btn}} onClick={()=>updateRol(u.user_id)}>Actualizar rol</button>
+
+                      { (rolDraft[u.user_id] ?? u.rol) === 'centro' && !abierto && (
+                        <button style={{...btn}} onClick={()=>openAssign(u.user_id)}>Asignar ahora</button>
+                      )}
+                    </div>
+
+                    {abierto && (
+                      <div style={{...row, marginTop:8}}>
+                        <select style={input} value={r.empresaId||''} onChange={async(e)=>pickEmpresa(u.user_id, e.target.value)}>
+                          <option value="">(empresa)</option>
+                          {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                        </select>
+                        <select style={input} value={r.zonaId||''} onChange={async(e)=>pickZona(u.user_id, e.target.value)} disabled={!r.empresaId}>
+                          <option value="">(zona)</option>
+                          {(r.zonas||[]).map(z=> <option key={z.id} value={z.id}>{z.nombre}</option>)}
+                        </select>
+                        <select style={input} value={r.centroId||''} onChange={(e)=>pickCentro(u.user_id, e.target.value)} disabled={!r.zonaId}>
+                          <option value="">(centro)</option>
+                          {(r.centros||[]).map(c=> <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                        <button style={btn} onClick={()=>saveAssign(u.user_id)}>Guardar</button>
+                        <button style={btn} onClick={()=>cancelAssign(u.user_id)}>Cancelar</button>
+                      </div>
+                    )}
+                  </td>
+                  <td style={thtd}>{rowMsg[u.user_id] || ''}</td>
+                </tr>
+              )
+            })}
             {!usuariosFiltrados.length && (
-              <tr><td style={thtd} colSpan={7}>Sin usuarios</td></tr>
+              <tr><td style={thtd} colSpan={8}>Sin usuarios</td></tr>
             )}
           </tbody>
         </table>
@@ -297,6 +388,5 @@ export default function UsuariosAdmin() {
     </div>
   )
 }
-
 
 
