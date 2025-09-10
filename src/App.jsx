@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Catalogos from './Catalogos.jsx'
+import UsuariosAdmin from './UsuariosAdmin.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -87,6 +88,9 @@ export default function App() {
     setChangeMsg('Contraseña actualizada. ✅')
   }
 
+  const [view, setView] = useState('panel') // panel | catalogos | usuarios
+  const isAdmin = profile?.rol === 'admin'
+
   // --- Vistas ---
   const needLogin = !session
   const needFirstRun = session && profile?.must_change_password
@@ -109,6 +113,15 @@ export default function App() {
           <p style={{ color: '#b00020' }}>{loginMsg}</p>
         </div>
       )}
+
+      {isAdmin && (
+        <button
+          style={{ ...btn, background: view === 'usuarios' ? '#f5f5f5' : 'white' }}
+          onClick={() => setView('usuarios')}
+          >
+            Usuarios
+          </button>
+        )}
 
       {/* Primer inicio: cambio de contraseña */}
       {needFirstRun && (
@@ -155,6 +168,8 @@ export default function App() {
               <p>Bienvenido. Usa las pestañas para navegar. Empecemos por <b>Catálogos</b> para cargar datos base.</p>
             </div>
           )}
+
+          {view === 'usuarios' && isAdmin && <UsuariosAdmin/>}
 
           {view === 'catalogos' && isAdmin && (
             <Catalogos profile={profile} />
