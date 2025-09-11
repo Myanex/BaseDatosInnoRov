@@ -1,301 +1,214 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient'
 
-const box  = { border:'1px solid #ddd', borderRadius:12, padding:16, margin:'16px 0' }
+const box  = { border:'1px solid #ddd', borderRadius:12, padding:16, margin:'16px 0', maxWidth:1200 }
 const row  = { display:'flex', gap:12, flexWrap:'wrap', alignItems:'center', marginTop:8 }
-const btn  = { padding:'8px 12px', border:'1px solid #bbb', borderRadius:8, cursor:'pointer' }
-const inp  = { padding:8, border:'1px solid #bbb', borderRadius:8 }
+const btn  = { padding:'8px 12px', border:'1px solid #bbb', borderRadius:8, cursor:'pointer', background:'#fff' }
+const input= { padding:8, border:'1px solid #bbb', borderRadius:8, background:'#fff' }
 const tbl  = { width:'100%', borderCollapse:'collapse', marginTop:8 }
-const thtd = { borderBottom:'1px solid #eee', padding:'6px 4px', textAlign:'left' }
+const thtd = { borderBottom:'1px solid #eee', padding:'6px 6px', textAlign:'left' }
+const tag  = (ok, text) => <span style={{padding:'2px 8px', borderRadius:999, fontSize:12, border:'1px solid #cfe9dc', background: ok?'#e6f6ed':'#fde8e8'}}>{text}</span>
 
-export default function Inventario({ profile }) {
-  const isAdminOrOficina = ['admin','oficina'].includes(profile?.rol)
-
+export default function Inventario() {
   // catálogos
   const [tipos, setTipos] = useState([])
   const [estados, setEstados] = useState([])
   const [equipos, setEquipos] = useState([])
+  const [componentes, setComponentes] = useState([]) // desde vista v_componente_ubicacion_actual
+  const [equiposResumen, setEquiposResumen] = useState([])
 
-  // datos
-  const [componentes, setComponentes] = useState([])
-  const [ensamblesActivos, setEnsamblesActivos] = useState([]) // [{componente_id, equipo_id, ...}]
+  // alta componente
+  const [tipoSel, setTipoSel] = useState('')
+  const [serie, setSerie] = useState('')
+  const [codigo, setCodigo] = useState('')
+  const [estadoSel, setEstadoSel] = useState('')
+  const [fechaIng, setFechaIng] = useState('')
 
-  // formularios
-  const [fComp, setFComp] = useState({
-    tipo_componente_id:'', codigo:'', serie:'', estado_componente_id:'', fecha_ingreso:''
-  })
-  const [q, setQ] = useState('') // búsqueda
-  const [fEns, setFEns] = useState({ componente_id:'', equipo_id:'', fecha_inicio:'', fecha_fin:'' })
+  // ensamblar / desarmar
+  const [compSel, setCompSel] = useState('')
+  const [equipoSel, setEquipoSel] = useState('')
+  const [fEns, setFEns] = useState('')
+  const [fDes, setFDes] = useState('')
   const [msg, setMsg] = useState('')
 
-  // ====== Cargas iniciales ======
+  const [q, setQ] = useState('')
+
+  // ====== carga ======
   const loadCatalogos = async () => {
-    const [{ data: t }, { data: e }, { data: eq }] = await Promise.all([
-      supabase.from('tipo_componente').select('id, codigo, nombre').order('nombre'),
-      supabase.from('estado_componente').select('id, codigo, nombre').order('nombre'),
-      supabase.from('equipos').select('id, codigo').order('codigo')
+    const [{ data: t }, { data: e }] = await Promise.all([
+      supabase.from('tipo_componente').select('id, nombre, codigo').order('nombre'),
+      supabase.from('estado_componente').select('id, nombre').order('nombre'),
     ])
-    setTipos(t || []); setEstados(e || []); setEquipos(eq || [])
+    setTipos(t || []); setEstados(e || [])
+  }
+
+  const loadEquipos = async () => {
+    const { data } = await supabase.from('equipos').select('id, codigo').order('codigo')
+    setEquipos(data || [])
   }
 
   const loadComponentes = async () => {
-    const { data } = await supabase
-      .from('componentes')
-      .select('id, codigo, serie, tipo_componente_id, estado_componente_id, fecha_ingreso')
-      .order('fecha_ingreso', { ascending:false })
+    const { data, error } = await supabase
+      .from('v_componente_ubicacion_actual')
+      .select('*')
+      .order('tipo', { ascending: true })
+      .order('codigo', { ascending: true })
+    if (error) setMsg('❌ '+error.message)
     setComponentes(data || [])
   }
 
-  const loadEnsamblesActivos = async () => {
-    const { data } = await supabase
-      .from('equipo_componente')
-      .select('componente_id, equipo_id, fecha_inicio, fecha_fin')
-      .is('fecha_fin', null)
-    setEnsamblesActivos(data || [])
+  const loadEquiposResumen = async () => {
+    const { data, error } = await supabase
+      .from('v_equipo_resumen_actual')
+      .select('*')
+      .order('equipo_codigo')
+    if (error) setMsg('❌ '+error.message)
+    setEquiposResumen(data || [])
   }
 
-  useEffect(() => {
-    loadCatalogos()
-    loadComponentes()
-    loadEnsamblesActivos()
-  }, [])
+  useEffect(() => { loadCatalogos(); loadEquipos(); loadComponentes(); loadEquiposResumen() }, [])
 
-  // ====== Helpers ======
-  const tipoById   = (id) => tipos.find(t=>t.id===id)
-  const estadoById = (id) => estados.find(e=>e.id===id)
-  const equipoById = (id) => equipos.find(e=>e.id===id)
+  // ====== helpers ======
+  const autogeneraCodigo = (tipoCodigo) => {
+    // ejemplo: ROV-0001, CTR-0001, UBM-0001, SNS-0001, GRB-0001
+    // busca máximo existente del prefijo y suma 1 (simple client-side; válido si 1 admin)
+    const pref = (tipoCodigo || '').toUpperCase().slice(0,3)
+    const existentes = (componentes || [])
+      .filter(c => (c.codigo || '').startsWith(pref + '-'))
+      .map(c => parseInt((c.codigo || '0').split('-')[1] || '0', 10))
+      .filter(n => !Number.isNaN(n))
+    const next = (existentes.length ? Math.max(...existentes) + 1 : 1)
+    return `${pref}-${String(next).padStart(4,'0')}`
+  }
 
-  // ====== Alta de componente (serie obligatoria, código opcional/autogenerado) ======
-  const guardarComponente = async () => {
+  // ====== acciones ======
+  const crear = async () => {
     setMsg('')
-    if (!isAdminOrOficina) return setMsg('Solo admin/oficina pueden crear componentes')
+    if (!tipoSel || !serie || !estadoSel) return setMsg('Completa tipo, serie y estado.')
+    const tipoRow = tipos.find(t => t.id === tipoSel)
+    const cod = codigo?.trim() || autogeneraCodigo(tipoRow?.codigo || tipoRow?.nombre || 'CMP')
 
-    if (!fComp.tipo_componente_id || !fComp.estado_componente_id) {
-      return setMsg('Completa tipo y estado')
-    }
-    if (!fComp.serie?.trim()) {
-      return setMsg('La serie (fábrica) es obligatoria')
-    }
-
-    const payload = {
-      tipo_componente_id: fComp.tipo_componente_id,
-      codigo: fComp.codigo?.trim() || null,   // si va null/'' => trigger autogenera (ROV-0001, etc.)
-      serie: fComp.serie?.trim(),
-      estado_componente_id: fComp.estado_componente_id,
-      fecha_ingreso: fComp.fecha_ingreso || null
-    }
-
-    const { data: inserted, error } = await supabase
+    const { error } = await supabase
       .from('componentes')
-      .insert(payload)
-      .select()
-      .single()
+      .insert([{
+        tipo_componente_id: tipoSel,
+        estado_componente_id: estadoSel,
+        fecha_ingreso: fechaIng || null,
+        serie: serie.trim(),
+        codigo: cod
+      }])
+    if (error) return setMsg('❌ '+error.message)
 
-    if (error) setMsg('❌ ' + error.message)
-    else {
-      setMsg(`✅ Componente guardado — Código: ${inserted.codigo}`)
-      setFComp({ tipo_componente_id:'', codigo:'', serie:'', estado_componente_id:'', fecha_ingreso:'' })
-      loadComponentes()
-    }
+    setTipoSel(''); setSerie(''); setCodigo(''); setEstadoSel(''); setFechaIng('')
+    await loadComponentes()
+    setMsg('✅ Componente agregado')
   }
 
-  // ====== Ensamblar / Desarmar ======
   const ensamblar = async () => {
     setMsg('')
-    if (!isAdminOrOficina) return setMsg('Solo admin/oficina pueden ensamblar')
-
-    const { componente_id, equipo_id, fecha_inicio } = fEns
-    if (!componente_id || !equipo_id || !fecha_inicio) {
-      return setMsg('Completa componente, equipo y fecha inicio')
-    }
-
-    // 1) validar que el componente no esté ya ensamblado
-    if (ensamblesActivos.some(m => m.componente_id === componente_id)) {
-      return setMsg('El componente ya está ensamblado. Desarma primero.')
-    }
-
-    // 2) validar que el equipo no tenga otro componente activo del mismo tipo (si es crítico)
-    const comp = componentes.find(c=>c.id===componente_id)
-    const compTipoId = comp?.tipo_componente_id
-    const activosEquipo = ensamblesActivos.filter(m => m.equipo_id === equipo_id)
-    const compIdsEquipo = new Set(activosEquipo.map(m=>m.componente_id))
-    const compsEquipo = componentes.filter(c => compIdsEquipo.has(c.id))
-
-    const tiposCriticos = new Set(
-      (tipos || [])
-        .filter(t => ['rov','umbilical','controlador'].includes(String(t.codigo || '').toLowerCase()))
-        .map(t => t.id)
-    )
-
-    if (tiposCriticos.has(compTipoId)) {
-      const yaHayMismoTipo = compsEquipo.some(c => c.tipo_componente_id === compTipoId)
-      if (yaHayMismoTipo) return setMsg('Ese equipo ya tiene un componente activo de ese tipo')
-    }
-
-    // es_opcional para sensor/grabber
-    const isOptional = ['sensor','grabber'].includes(String(tipoById(compTipoId)?.codigo || '').toLowerCase())
-
-    const { error } = await supabase.from('equipo_componente').insert({
-      componente_id, equipo_id, fecha_inicio, es_opcional: isOptional
-    })
-    if (error) setMsg('❌ ' + error.message)
-    else {
-      setMsg('✅ Ensamblado')
-      setFEns({ componente_id:'', equipo_id:'', fecha_inicio:'', fecha_fin:'' })
-      loadEnsamblesActivos()
-    }
+    if (!compSel || !equipoSel) return setMsg('Elige componente y equipo')
+    // 1) cerrar bodega abierta (si existe)
+    await supabase.rpc('fn_componente_bodega_cerrar', { p_componente_id: compSel, p_fecha: fEns || null })
+    // 2) asociar al equipo
+    const { error } = await supabase
+      .from('equipo_componente')
+      .insert([{ equipo_id: equipoSel, componente_id: compSel, fecha_inicio: fEns || null }])
+    if (error) return setMsg('❌ '+error.message)
+    await Promise.all([loadComponentes(), loadEquiposResumen()])
+    setMsg('✅ Ensamblado')
   }
 
   const desarmar = async () => {
     setMsg('')
-    if (!isAdminOrOficina) return setMsg('Solo admin/oficina pueden desarmar')
+    if (!compSel) return setMsg('Elige el componente a desarmar')
 
-    const { componente_id, fecha_fin } = fEns
-    if (!componente_id || !fecha_fin) return setMsg('Selecciona componente y fecha fin')
-
-    const activo = ensamblesActivos.find(m => m.componente_id === componente_id)
-    if (!activo) return setMsg('Ese componente no está ensamblado')
-
+    // buscamos dónde está armado para conocer el centro
+    const comp = componentes.find(c => c.componente_id === compSel)
+    // 1) cerrar relación equipo_componente actual
     const { error } = await supabase
       .from('equipo_componente')
-      .update({ fecha_fin })
-      .eq('componente_id', componente_id)
+      .update({ fecha_fin: fDes || new Date().toISOString().slice(0,10) })
+      .eq('componente_id', compSel)
       .is('fecha_fin', null)
+    if (error) return setMsg('❌ '+error.message)
 
-    if (error) setMsg('❌ ' + error.message)
-    else {
-      setMsg('✅ Desarmado')
-      setFEns({ componente_id:'', equipo_id:'', fecha_inicio:'', fecha_fin:'' })
-      loadEnsamblesActivos()
+    // 2) abrir bodega en el centro actual del equipo (si lo sabemos)
+    if (comp?.centro) {
+      // Nota: para esto necesitaríamos el id del centro. Si quieres exactitud 100%,
+      // agrega centro_id a la vista v_componente_ubicacion_actual y úsalo aquí.
+      // Por ahora dejamos solo el cierre de equipo; la UI seguirá mostrando "reserva/bodega" cuando lo setees.
     }
+
+    await Promise.all([loadComponentes(), loadEquiposResumen()])
+    setMsg('✅ Desarmado')
   }
 
-  // ====== Lista con búsqueda ======
-  const lista = useMemo(() => {
-    const qn = q.trim().toLowerCase()
-    if (!qn) return componentes
-    return componentes.filter(c => {
-      const t   = tipoById(c.tipo_componente_id)?.nombre || ''
-      const cod = c.codigo || ''
-      const ser = c.serie || ''
-      return [t, cod, ser].some(v => String(v).toLowerCase().includes(qn))
-    })
-  }, [q, componentes, tipos])
+  // ====== filtros ======
+  const componentesFiltrados = useMemo(() => {
+    const qq = q.trim().toLowerCase()
+    if (!qq) return componentes
+    return (componentes || []).filter(c =>
+      [c.tipo, c.codigo, c.serie, c.estado, c.centro, c.equipo_codigo]
+        .some(v => String(v||'').toLowerCase().includes(qq))
+    )
+  }, [q, componentes])
 
-  const equipoActual = (compId) => {
-    const m = ensamblesActivos.find(x => x.componente_id === compId)
-    if (!m) return ''
-    return equipoById(m.equipo_id)?.codigo || `(equipo ${m.equipo_id})`
-  }
-
-  // ====== UI ======
   return (
     <div>
-      <h2>Inventario</h2>
-
-      {/* Alta de componente */}
+      {/* Alta componente */}
       <section style={box}>
         <h3>Agregar componente</h3>
         <div style={row}>
-          <select
-            style={inp}
-            value={fComp.tipo_componente_id}
-            onChange={e=>setFComp(v=>({...v, tipo_componente_id:e.target.value}))}
-          >
-            <option value="">Tipo…</option>
-            {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre} ({t.codigo})</option>)}
+          <select style={input} value={tipoSel} onChange={e=>setTipoSel(e.target.value)}>
+            <option value="">Tipo...</option>
+            {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </select>
 
-          <input
-            style={inp}
-            placeholder="Serie (fábrica) — obligatoria"
-            value={fComp.serie}
-            onChange={e=>setFComp(v=>({...v, serie:e.target.value}))}
-          />
+          <input style={input} placeholder="Serie (fábrica) — obligatoria" value={serie} onChange={e=>setSerie(e.target.value)} />
+          <input style={input} placeholder="Código (opcional, autogenerado)" value={codigo} onChange={e=>setCodigo(e.target.value)} />
 
-          <input
-            style={inp}
-            placeholder="Código (opcional, autogenera si vacío)"
-            value={fComp.codigo}
-            onChange={e=>setFComp(v=>({...v, codigo:e.target.value}))}
-          />
-
-          <select
-            style={inp}
-            value={fComp.estado_componente_id}
-            onChange={e=>setFComp(v=>({...v, estado_componente_id:e.target.value}))}
-          >
-            <option value="">Estado…</option>
-            {estados.map(t => <option key={t.id} value={t.id}>{t.nombre} ({t.codigo})</option>)}
+          <select style={input} value={estadoSel} onChange={e=>setEstadoSel(e.target.value)}>
+            <option value="">Estado...</option>
+            {estados.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </select>
 
-          <input
-            type="date"
-            style={inp}
-            value={fComp.fecha_ingreso}
-            onChange={e=>setFComp(v=>({...v, fecha_ingreso:e.target.value}))}
-          />
-
-          <button style={btn} onClick={guardarComponente} disabled={!isAdminOrOficina}>Guardar</button>
+          <input style={input} type="date" value={fechaIng} onChange={e=>setFechaIng(e.target.value)} />
+          <button style={btn} onClick={crear}>Guardar</button>
         </div>
-        <p>{msg}</p>
       </section>
 
       {/* Ensamblar / Desarmar */}
       <section style={box}>
         <h3>Ensamblar / Desarmar</h3>
         <div style={row}>
-          <select
-            style={inp}
-            value={fEns.componente_id}
-            onChange={e=>setFEns(v=>({...v, componente_id:e.target.value}))}
-          >
-            <option value="">Componente…</option>
+          <select style={input} value={compSel} onChange={e=>setCompSel(e.target.value)}>
+            <option value="">Componente...</option>
             {componentes.map(c => (
-              <option key={c.id} value={c.id}>
-                {tipoById(c.tipo_componente_id)?.codigo?.toUpperCase()} · {c.codigo} · {c.serie || 'sin serie'}
-                {ensamblesActivos.some(m=>m.componente_id===c.id) ? ' · (ENSAMBLADO)' : ''}
+              <option key={c.componente_id} value={c.componente_id}>
+                {c.tipo} — {c.codigo || c.serie} ({c.ubic_tipo}{c.centro ? ` · ${c.centro}`:''}{c.equipo_codigo?` · ${c.equipo_codigo}`:''})
               </option>
             ))}
           </select>
 
-          <select
-            style={inp}
-            value={fEns.equipo_id}
-            onChange={e=>setFEns(v=>({...v, equipo_id:e.target.value}))}
-          >
-            <option value="">Equipo…</option>
+          <select style={input} value={equipoSel} onChange={e=>setEquipoSel(e.target.value)}>
+            <option value="">Equipo...</option>
             {equipos.map(e => <option key={e.id} value={e.id}>{e.codigo}</option>)}
           </select>
 
-          <input
-            type="date"
-            style={inp}
-            value={fEns.fecha_inicio}
-            onChange={e=>setFEns(v=>({...v, fecha_inicio:e.target.value}))}
-          />
-          <button style={btn} onClick={ensamblar} disabled={!isAdminOrOficina}>Ensamblar</button>
+          <input style={input} type="date" value={fEns} onChange={e=>setFEns(e.target.value)} />
+          <button style={btn} onClick={ensamblar}>Ensamblar</button>
 
-          <input
-            type="date"
-            style={inp}
-            value={fEns.fecha_fin}
-            onChange={e=>setFEns(v=>({...v, fecha_fin:e.target.value}))}
-          />
-          <button style={btn} onClick={desarmar} disabled={!isAdminOrOficina}>Desarmar</button>
+          <input style={input} type="date" value={fDes} onChange={e=>setFDes(e.target.value)} />
+          <button style={btn} onClick={desarmar}>Desarmar</button>
         </div>
       </section>
 
-      {/* Lista buscable */}
+      {/* Componentes */}
       <section style={box}>
         <h3>Componentes</h3>
         <div style={row}>
-          <input
-            style={inp}
-            placeholder="Buscar (tipo/código/serie)…"
-            value={q}
-            onChange={e=>setQ(e.target.value)}
-          />
+          <input style={input} placeholder="Buscar (tipo/código/serie/centro/equipo)..." value={q} onChange={e=>setQ(e.target.value)} />
+          <button style={btn} onClick={loadComponentes}>Refrescar</button>
         </div>
 
         <table style={tbl}>
@@ -306,30 +219,81 @@ export default function Inventario({ profile }) {
               <th style={thtd}>Serie</th>
               <th style={thtd}>Estado</th>
               <th style={thtd}>Ingreso</th>
-              <th style={thtd}>Equipo actual</th>
+              <th style={thtd}>Ubicación</th>  {/* NUEVA */}
               <th style={thtd}>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {lista.map(c => (
-              <tr key={c.id}>
-                <td style={thtd}>{tipoById(c.tipo_componente_id)?.nombre || c.tipo_componente_id}</td>
+            {componentesFiltrados.map(c => (
+              <tr key={c.componente_id}>
+                <td style={thtd}>{c.tipo}</td>
                 <td style={thtd}>{c.codigo}</td>
-                <td style={thtd}>{c.serie || '—'}</td>
-                <td style={thtd}>{estadoById(c.estado_componente_id)?.nombre || c.estado_componente_id}</td>
-                <td style={thtd}>{c.fecha_ingreso || '—'}</td>
-                <td style={thtd}>{equipoActual(c.id) || 'Libre'}</td>
+                <td style={thtd}>{c.serie}</td>
+                <td style={thtd}>{c.estado}</td>
+                <td style={thtd}>{c.fecha_ingreso || ''}</td>
                 <td style={thtd}>
-                  <button style={btn} onClick={()=>setFEns(v=>({...v, componente_id:c.id}))}>Ensamblar…</button>
+                  {c.ubic_tipo === 'equipo' && (<span>{c.centro} — <b>{c.equipo_codigo}</b></span>)}
+                  {c.ubic_tipo === 'bodega' && (<span>{c.centro} — Bodega</span>)}
+                  {c.ubic_tipo === 'reserva' && (<span>Reserva</span>)}
+                </td>
+                <td style={thtd}>
+                  {/* Atajo para ensamblar desde la tabla */}
+                  <button style={btn} onClick={()=>{ setCompSel(c.componente_id); }}>Ensamblar…</button>
                 </td>
               </tr>
             ))}
-            {!lista.length && (
-              <tr><td style={thtd} colSpan={7}>Sin componentes</td></tr>
+            {!componentesFiltrados.length && (
+              <tr><td style={thtd} colSpan={7}>Sin registros</td></tr>
             )}
           </tbody>
         </table>
       </section>
+
+      {/* Equipos formados */}
+      <section style={box}>
+        <h3>Equipos formados</h3>
+        <table style={tbl}>
+          <thead>
+            <tr>
+              <th style={thtd}>Equipo</th>
+              <th style={thtd}>Centro</th>
+              <th style={thtd}>ROV</th>
+              <th style={thtd}>CTRL</th>
+              <th style={thtd}>UMB</th>
+              <th style={thtd}>Grabber</th>
+              <th style={thtd}>Sensores</th>
+              <th style={thtd}>Estado</th>
+              <th style={thtd}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {equiposResumen.map(r => (
+              <tr key={r.equipo_id}>
+                <td style={thtd}>{r.equipo_codigo}</td>
+                <td style={thtd}>{r.centro || '—'}</td>
+                <td style={thtd}>{r.rov_codigo || '—'}</td>
+                <td style={thtd}>{r.ctrl_codigo || '—'}</td>
+                <td style={thtd}>{r.umb_codigo || '—'}</td>
+                <td style={thtd}>{r.grabber_codigo || '—'}</td>
+                <td style={thtd}>{r.sensores || 0}</td>
+                <td style={thtd}>
+                  {tag(r.core_completo, r.core_completo ? 'Core completo' : 'Incompleto')}
+                  {' '}
+                  {tag(r.rov_ctrl_pareados, r.rov_ctrl_pareados ? 'Pareados' : 'No pareados')}
+                </td>
+                <td style={thtd}>
+                  <button style={btn} onClick={()=>alert('(WIP) Abrir detalle de equipo')} >Ver</button>
+                </td>
+              </tr>
+            ))}
+            {!equiposResumen.length && (
+              <tr><td style={thtd} colSpan={9}>Sin equipos</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {!!msg && <p style={{marginTop:8}}>{msg}</p>}
     </div>
   )
 }
