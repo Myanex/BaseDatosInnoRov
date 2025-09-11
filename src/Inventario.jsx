@@ -21,6 +21,21 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://YOUR-PROJE
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR-ANON-KEY'
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// Verificación de variables de entorno para evitar "Failed to fetch" por URL/KEY inválidas
+function hasValidSupabaseEnv() {
+  const badUrl = !SUPABASE_URL || SUPABASE_URL.includes('YOUR-PROJECT') || !SUPABASE_URL.startsWith('https://')
+  const badKey = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes('YOUR-ANON-KEY')
+  return !(badUrl || badKey)
+}
+
+function humanizeError(err) {
+  const msg = err?.message || String(err)
+  if (msg.includes('Failed to fetch')) {
+    return 'No se pudo conectar a Supabase. Revisa NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY (Vercel) y vuelve a desplegar.'
+  }
+  return msg
+}
+
 // Mapeo simple de compatibilidad por tipo de componente
 // - Un equipo puede tener solo 1: ROV, Controlador, Umbilical
 // - Puede tener múltiples: Sensor, Grabber (ajuste según su operación)
@@ -268,6 +283,7 @@ function Modal({ open, onClose, title, children, footer }) {
 // Página principal -------------------------------------------------------
 export default function Inventario() {
   const [perfil, setPerfil] = useState({ rol: 'oficina', centro_id: null })
+  const [envOk] = useState(hasValidSupabaseEnv())
   const [tab, setTab] = useState('componentes') // 'componentes' | 'equipos'
 
   const [loading, setLoading] = useState(false)
@@ -298,10 +314,25 @@ export default function Inventario() {
   }, [perfil?.rol, perfil?.centro_id])
 
   async function refresh() {
+    if (!envOk) {
+      setErrorMsg('Configura las variables NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en Vercel (Project → Settings → Environment Variables).')
+      return
+    }
     try {
       setLoading(true)
       const [c, e] = await Promise.all([
         fetchComponentes({ centro_id: perfil?.centro_id, rol: perfil?.rol }),
+        fetchEquipos({ centro_id: perfil?.centro_id, rol: perfil?.rol })
+      ])
+      setComponentes(c)
+      setEquipos(e)
+    } catch (err) {
+      console.error(err)
+      setErrorMsg(humanizeError(err) || 'Error al cargar datos')
+    } finally {
+      setLoading(false)
+    }
+  }),
         fetchEquipos({ centro_id: perfil?.centro_id, rol: perfil?.rol })
       ])
       setComponentes(c)
@@ -411,13 +442,13 @@ export default function Inventario() {
         <div>
           <h1 className="text-xl font-bold text-zinc-100">Inventario</h1>
           <p className="text-sm text-zinc-400">Perfil: <b>{perfil?.rol || '—'}</b> {perfil?.centro_nombre ? `· Centro ${perfil.centro_nombre}` : ''}</p>
+          {!envOk && (
+            <p className="mt-2 text-xs text-amber-300">Modo instalación: faltan variables de entorno. Configúralas para conectar.</p>
+          )}
         </div>
         <div className="flex gap-2">
           <TabButton active={tab==='componentes'} onClick={() => setTab('componentes')}>Componentes</TabButton>
-          <TabButton active={tab==='equipos'} onClick={() => setTab('equipos')}>Equipos</TabButton>
-          <button onClick={refresh} className="px-3 py-2 rounded-2xl bg-zinc-800 text-zinc-100 border border-zinc-700 hover:bg-zinc-700">Recargar</button>
-        </div>
-      </header>
+          <Tab
 
       {errorMsg && (
         <div className="p-3 rounded-xl border border-red-700 bg-red-900/20 text-red-200">{errorMsg}</div>
@@ -508,3 +539,4 @@ export default function Inventario() {
     </div>
   )
 }
+
