@@ -370,14 +370,21 @@ export default function Inventario() {
     try {
       if (!tipoSel || !estadoSel || !serieNueva.trim()) { setErrorMsg('Tipo, Estado y Serie son obligatorios'); return }
       setSaving(true)
-      const comp = await createComponente({ tipoId: tipoSel, estadoId: estadoSel, serie: serieNueva.trim(), fecha: fechaIng, codigoManual: codigoManualComp.trim() || null })
-      if (centroBodegaSel) await setBodegaInicial({ componenteId: comp.id, centroId: centroBodegaSel, fecha: fechaIng })
-      setOkMsg(`Componente creado: ${comp.codigo}`)
+      const comp = await createComponente({
+        tipoId: tipoSel,
+        estadoId: estadoSel,
+        serie: serieNueva.trim(),
+        fecha: fechaIng,
+        codigoManual: codigoManualComp.trim() || null,
+        centroBodegaId: centroBodegaSel || null,
+      })
+      setOkMsg(`Componente creado: ${comp?.codigo || ''}`)
       setOpenAddComp(false)
-      // reset
       setTipoSel(''); setEstadoSel(''); setSerieNueva(''); setFechaIng(new Date().toISOString().slice(0,10)); setCodigoManualComp(''); setCentroBodegaSel('')
       await refresh()
     } catch (err) { setErrorMsg(err.message || 'No se pudo crear el componente') }
+    finally { setSaving(false) }
+  } catch (err) { setErrorMsg(err.message || 'No se pudo crear el componente') }
     finally { setSaving(false) }
   }
 
