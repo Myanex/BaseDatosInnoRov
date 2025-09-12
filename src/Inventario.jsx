@@ -290,6 +290,11 @@ export default function Inventario() {
   const [equipoTaller, setEquipoTaller] = useState(null)
   const [tallerNombre, setTallerNombre] = useState('Taller')
 
+  // Modal Detalle equipo
+  const [openDetalle, setOpenDetalle] = useState(false)
+  const [detalleEquipo, setDetalleEquipo] = useState(null)
+  function openModalDetalle(equipo) { setDetalleEquipo(equipo); setOpenDetalle(true) }
+
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [okMsg, setOkMsg] = useState('')
@@ -706,5 +711,6 @@ export default function Inventario() {
     </div>
   )
 }
+
 
 
