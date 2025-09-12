@@ -15,18 +15,8 @@
 // - React + Tailwind
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './supabaseClient'
 
-// 👉 Variables de entorno (Vercel)
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://YOUR-PROJECT.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR-ANON-KEY'
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-function hasValidSupabaseEnv() {
-  const badUrl = !SUPABASE_URL || SUPABASE_URL.includes('YOUR-PROJECT') || !SUPABASE_URL.startsWith('https://')
-  const badKey = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes('YOUR-ANON-KEY')
-  return !(badUrl || badKey)
-}
 
 function humanizeError(err) {
   const msg = err?.message || String(err)
@@ -242,8 +232,7 @@ function Modal({ open, onClose, title, children, footer }) {
 // Página principal -------------------------------------------------------
 export default function Inventario() {
   const [perfil, setPerfil] = useState({ rol: 'oficina', centro_id: null })
-  const [envOk] = useState(hasValidSupabaseEnv())
-  const [tab, setTab] = useState('componentes')
+    const [tab, setTab] = useState('componentes')
 
   const [loading, setLoading] = useState(false)
   const [componentes, setComponentes] = useState([])
@@ -278,8 +267,7 @@ export default function Inventario() {
   useEffect(() => { (async () => { try { const cs = await fetchCentros(); setCentros(cs) } catch {} })() }, [])
 
   async function refresh() {
-    if (!envOk) { setErrorMsg('Configura variables NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.'); return }
-    try {
+        try {
       setLoading(true)
       const [c, e] = await Promise.all([
         fetchComponentes({ centro_id: perfil?.centro_id, rol: perfil?.rol }),
@@ -420,8 +408,7 @@ export default function Inventario() {
         <div>
           <h1 className="text-xl font-bold text-zinc-100">Inventario</h1>
           <p className="text-sm text-zinc-400">Perfil: <b>{perfil?.rol || '—'}</b> {perfil?.centro_nombre ? `· Centro ${perfil.centro_nombre}` : ''}</p>
-          {!envOk && (<p className="mt-2 text-xs text-amber-300">Modo instalación: faltan variables de entorno.</p>)}
-        </div>
+                  </div>
         <div className="flex gap-2">
           <TabButton active={tab==='componentes'} onClick={() => setTab('componentes')}>Componentes</TabButton>
           <TabButton active={tab==='equipos'} onClick={() => setTab('equipos')}>Equipos</TabButton>
