@@ -1,3 +1,4 @@
+'use client'
 // Inventario.jsx — Vista ampliada (Oficina/Centro)
 // -------------------------------------------------
 // Características:
