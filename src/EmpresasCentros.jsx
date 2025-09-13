@@ -1,205 +1,243 @@
-import React, { useEffect, useState } from 'react'
+
+'use client'
+
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient'
 
-const box  = { border:'1px solid #ddd', borderRadius:12, padding:16, margin:'16px 0' }
-const row  = { display:'flex', gap:12, flexWrap:'wrap', alignItems:'center', marginTop:8 }
-const btn  = { padding:'8px 12px', border:'1px solid #bbb', borderRadius:8, cursor:'pointer' }
-const inp  = { padding:8, border:'1px solid #bbb', borderRadius:8 }
-const tbl  = { width:'100%', borderCollapse:'collapse', marginTop:8 }
-const thtd = { borderBottom:'1px solid #eee', padding:'6px 4px', textAlign:'left' }
+const cn = (...a) => a.filter(Boolean).join(' ')
 
-export default function EmpresasCentros({ profile }) {
-  const isAdmin = profile?.rol === 'admin'
+function Card({ title, children, footer }) {
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-zinc-100 font-semibold">{title}</h3>
+      </div>
+      <div className="space-y-3">{children}</div>
+      {footer && <div className="pt-3 border-t border-zinc-700 mt-3">{footer}</div>}
+    </div>
+  )
+}
+
+export default function EmpresaCentros() {
+  const [perfil, setPerfil] = useState({ rol: 'oficina' })
+
   const [empresas, setEmpresas] = useState([])
-  const [selEmp, setSelEmp] = useState(null)
   const [zonas, setZonas] = useState([])
   const [centros, setCentros] = useState([])
 
-  const [emp, setEmp] = useState({ id:null, nombre:'', is_active:true })
-  const [zo,  setZo ] = useState({ id:null, nombre:'', region:'', is_active:true })
-  const [cen, setCen] = useState({ id:null, nombre:'', fecha_inicio:'', is_active:true, zona_id:'' })
+  const [empresaSel, setEmpresaSel] = useState('')
+  const [zonaSel, setZonaSel] = useState('')
 
-  const loadEmpresas = async () => {
-    const { data } = await supabase.from('empresas').select('*').order('nombre')
+  // forms
+  const [empresaNombre, setEmpresaNombre] = useState('')
+  const [zonaNombre, setZonaNombre] = useState('')
+  const [centroNombre, setCentroNombre] = useState('')
+  const [centroFecha, setCentroFecha] = useState(() => new Date().toISOString().slice(0,10))
+
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [okMsg, setOkMsg] = useState('')
+  const [errMsg, setErrMsg] = useState('')
+
+  useEffect(() => { (async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data } = await supabase.from('profiles').select('rol').eq('user_id', user.id).maybeSingle()
+      setPerfil({ rol: data?.rol || 'oficina' })
+    }
+  })() }, [])
+
+  async function loadEmpresas() {
+    const { data, error } = await supabase.from('empresas').select('id, nombre, is_active').order('nombre', { ascending: true })
+    if (error) throw error
     setEmpresas(data || [])
-    if (!selEmp && data?.length) setSelEmp(data[0])
   }
-  const loadZonas = async (empresa_id) => {
-    if (!empresa_id) return setZonas([])
-    const { data } = await supabase.from('zonas')
-      .select('id, nombre, region, is_active, empresa_id')
-      .eq('empresa_id', empresa_id).order('nombre')
+  async function loadZonas(empId) {
+    const { data, error } = await supabase.from('zonas').select('id, nombre, empresa_id').eq('empresa_id', empId).order('nombre', { ascending: true })
+    if (error) throw error
     setZonas(data || [])
   }
-  const loadCentros = async (empresa_id) => {
-    if (!empresa_id) return setCentros([])
-    const { data } = await supabase.from('centros')
-      .select('id, nombre, fecha_inicio, is_active, empresa_id, zona_id')
-      .eq('empresa_id', empresa_id).order('nombre')
+  async function loadCentros(zonId) {
+    const { data, error } = await supabase.from('centros').select('id, nombre, zona_id, fecha_inicio').eq('zona_id', zonId).order('nombre', { ascending: true })
+    if (error) throw error
     setCentros(data || [])
   }
 
-  useEffect(() => { loadEmpresas() }, [])
-  useEffect(() => { loadZonas(selEmp?.id); loadCentros(selEmp?.id) }, [selEmp?.id])
-
-  const copiar = async (txt) => { try { await navigator.clipboard.writeText(txt); alert('ID copiado'); } catch {} }
-
-  // EMPRESAS
-  const guardarEmpresa = async () => {
-    if (!isAdmin) return alert('Solo Admin')
-    if (!emp.nombre.trim()) return alert('Nombre requerido')
-    const payload = { nombre: emp.nombre.trim(), is_active: !!emp.is_active }
-    if (emp.id) await supabase.from('empresas').update(payload).eq('id', emp.id)
-    else        await supabase.from('empresas').insert(payload)
-    setEmp({ id:null, nombre:'', is_active:true })
-    await loadEmpresas()
+  async function refreshAll() {
+    try {
+      setLoading(true)
+      await loadEmpresas()
+      if (empresaSel) await loadZonas(empresaSel)
+      else { setZonas([]); setZonaSel(''); setCentros([]) }
+      if (zonaSel) await loadCentros(zonaSel)
+    } catch (e) {
+      setErrMsg(e.message)
+    } finally { setLoading(false) }
   }
 
-  // ZONAS
-  const guardarZona = async () => {
-    if (!isAdmin) return alert('Solo Admin')
-    if (!selEmp?.id) return alert('Selecciona empresa')
-    if (!zo.nombre.trim()) return alert('Nombre zona requerido')
-    const payload = { empresa_id: selEmp.id, nombre: zo.nombre.trim(), region: zo.region?.trim() || null, is_active: !!zo.is_active }
-    if (zo.id) await supabase.from('zonas').update(payload).eq('id', zo.id)
-    else       await supabase.from('zonas').insert(payload)
-    setZo({ id:null, nombre:'', region:'', is_active:true })
-    await loadZonas(selEmp.id)
+  useEffect(() => { refreshAll() }, [])
+  useEffect(() => { if (empresaSel) { loadZonas(empresaSel); setZonaSel(''); setCentros([]) } }, [empresaSel])
+  useEffect(() => { if (zonaSel) { loadCentros(zonaSel) } else { setCentros([]) } }, [zonaSel])
+
+  // Actions -------------------------------------------------------------
+  async function crearEmpresa() {
+    if (!empresaNombre.trim()) { setErrMsg('Nombre de empresa es obligatorio'); return }
+    try {
+      setSaving(true)
+      const { error } = await supabase.from('empresas').insert({ nombre: empresaNombre.trim(), is_active: true })
+      if (error) throw error
+      setEmpresaNombre('')
+      setOkMsg('Empresa creada')
+      await loadEmpresas()
+    } catch (e) { setErrMsg(e.message) } finally { setSaving(false) }
   }
 
-  // CENTROS
-  const guardarCentro = async () => {
-    if (!isAdmin) return alert('Solo Admin')
-    if (!selEmp?.id) return alert('Selecciona empresa')
-    if (!cen.nombre.trim()) return alert('Nombre requerido')
-    if (!cen.zona_id) return alert('Selecciona zona')
-
-    const payload = {
-      nombre: cen.nombre.trim(),
-      empresa_id: selEmp.id,
-      zona_id: cen.zona_id,
-      is_active: !!cen.is_active,
-      fecha_inicio: cen.fecha_inicio || null
-    }
-    if (cen.id) await supabase.from('centros').update(payload).eq('id', cen.id)
-    else        await supabase.from('centros').insert(payload)
-    setCen({ id:null, nombre:'', fecha_inicio:'', is_active:true, zona_id:'' })
-    await loadCentros(selEmp.id)
+  async function toggleEmpresaActiva(emp) {
+    try {
+      setSaving(true)
+      const { error } = await supabase.from('empresas').update({ is_active: !emp.is_active }).eq('id', emp.id)
+      if (error) throw error
+      await loadEmpresas()
+    } catch (e) { setErrMsg(e.message) } finally { setSaving(false) }
   }
 
+  async function crearZona() {
+    if (!empresaSel) { setErrMsg('Selecciona una empresa'); return }
+    if (!zonaNombre.trim()) { setErrMsg('Nombre de zona es obligatorio'); return }
+    try {
+      setSaving(true)
+      const { error } = await supabase.from('zonas').insert({ nombre: zonaNombre.trim(), empresa_id: empresaSel })
+      if (error) throw error
+      setZonaNombre('')
+      setOkMsg('Zona creada')
+      await loadZonas(empresaSel)
+    } catch (e) { setErrMsg(e.message) } finally { setSaving(false) }
+  }
+
+  async function crearCentro() {
+    if (!zonaSel) { setErrMsg('Selecciona una zona'); return }
+    if (!centroNombre.trim()) { setErrMsg('Nombre de centro es obligatorio'); return }
+    try {
+      setSaving(true)
+      const { error } = await supabase.from('centros').insert({ nombre: centroNombre.trim(), zona_id: zonaSel, fecha_inicio: centroFecha || null })
+      if (error) throw error
+      setCentroNombre('')
+      setOkMsg('Centro creado')
+      await loadCentros(zonaSel)
+    } catch (e) { setErrMsg(e.message) } finally { setSaving(false) }
+  }
+
+  // Render --------------------------------------------------------------
   return (
-    <div>
-      <h2>Admin · Empresas / Zonas / Centros</h2>
-
-      {/* EMPRESAS */}
-      <section style={box}>
-        <h3>Empresas</h3>
-        <div style={row}>
-          <input style={inp} placeholder="Nombre empresa"
-            value={emp.nombre} onChange={e=>setEmp(v=>({...v, nombre:e.target.value}))}/>
-          <label><input type="checkbox" checked={emp.is_active}
-            onChange={e=>setEmp(v=>({...v, is_active:e.target.checked}))}/> Activa</label>
-          <button style={btn} onClick={guardarEmpresa} disabled={!isAdmin}>Guardar</button>
-          {emp.id && <span>ID: {emp.id}</span>}
-          <div style={{flex:1}}/>
-          <select style={inp} value={selEmp?.id || ''} onChange={e=>{
-            const o = empresas.find(x=>x.id===e.target.value); setSelEmp(o || null);
-          }}>
-            {empresas.map(e=> <option key={e.id} value={e.id}>{e.nombre}</option>)}
-          </select>
+    <div className="p-4 space-y-4">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-100">Empresas / Zonas / Centros</h1>
+          <p className="text-sm text-zinc-400">Perfil: <b>{perfil?.rol}</b></p>
         </div>
-
-        <table style={tbl}>
-          <thead><tr><th style={thtd}>Nombre</th><th style={thtd}>Activa</th><th style={thtd}>ID</th><th style={thtd}>Acciones</th></tr></thead>
-          <tbody>
-            {empresas.map(e=>(
-              <tr key={e.id}>
-                <td style={thtd}>{e.nombre}</td>
-                <td style={thtd}>{e.is_active ? 'Sí' : 'No'}</td>
-                <td style={thtd}><code>{e.id}</code></td>
-                <td style={thtd}>
-                  <button style={btn} onClick={()=>setEmp({ id:e.id, nombre:e.nombre, is_active:!!e.is_active })}>Editar</button>{' '}
-                  <button style={btn} onClick={()=>copiar(e.id)}>Copiar ID</button>{' '}
-                  <button style={btn} onClick={()=>setSelEmp(e)}>Seleccionar</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* ZONAS */}
-      <section style={box}>
-        <h3>Zonas {selEmp ? `— ${selEmp.nombre}` : ''}</h3>
-        <div style={row}>
-          <input style={inp} placeholder="Nombre zona (ej: Puerto Montt)"
-            value={zo.nombre} onChange={e=>setZo(v=>({...v, nombre:e.target.value}))}/>
-          <input style={inp} placeholder="Región (opcional)"
-            value={zo.region} onChange={e=>setZo(v=>({...v, region:e.target.value}))}/>
-          <label><input type="checkbox" checked={zo.is_active}
-            onChange={e=>setZo(v=>({...v, is_active:e.target.checked}))}/> Activa</label>
-          <button style={btn} onClick={guardarZona} disabled={!isAdmin}>Guardar</button>
+        <div className="flex gap-2">
+          <button onClick={refreshAll} className="btn-ghost">Recargar</button>
         </div>
+      </header>
 
-        <table style={tbl}>
-          <thead><tr><th style={thtd}>Zona</th><th style={thtd}>Región</th><th style={thtd}>Activa</th><th style={thtd}>ID</th><th style={thtd}>Acciones</th></tr></thead>
-          <tbody>
-            {zonas.map(z=>(
-              <tr key={z.id}>
-                <td style={thtd}>{z.nombre}</td>
-                <td style={thtd}>{z.region || '—'}</td>
-                <td style={thtd}>{z.is_active ? 'Sí' : 'No'}</td>
-                <td style={thtd}><code>{z.id}</code></td>
-                <td style={thtd}>
-                  <button style={btn} onClick={()=>setZo({ id:z.id, nombre:z.nombre, region:z.region || '', is_active:!!z.is_active })}>Editar</button>
-                </td>
-              </tr>
-            ))}
-            {zonas.length===0 && <tr><td style={thtd} colSpan={5}>No hay zonas</td></tr>}
-          </tbody>
-        </table>
-      </section>
+      {errMsg && <div className="p-3 rounded-xl border border-red-700 bg-red-900/20 text-red-200">{errMsg}</div>}
+      {okMsg && <div className="p-3 rounded-xl border border-emerald-700 bg-emerald-900/20 text-emerald-200">{okMsg}</div>}
 
-      {/* CENTROS */}
-      <section style={box}>
-        <h3>Centros {selEmp ? `— ${selEmp.nombre}` : ''}</h3>
-        <div style={row}>
-          <select style={inp} value={cen.zona_id} onChange={e=>setCen(v=>({...v, zona_id:e.target.value}))}>
-            <option value="">(elige zona)</option>
-            {zonas.map(z => <option key={z.id} value={z.id}>{z.nombre}</option>)}
-          </select>
-          <input style={inp} placeholder="Nombre centro"
-            value={cen.nombre} onChange={e=>setCen(v=>({...v, nombre:e.target.value}))}/>
-          <input style={inp} type="date"
-            value={cen.fecha_inicio} onChange={e=>setCen(v=>({...v, fecha_inicio:e.target.value}))}/>
-          <label><input type="checkbox" checked={cen.is_active}
-            onChange={e=>setCen(v=>({...v, is_active:e.target.checked}))}/> Activo</label>
-          <button style={btn} onClick={guardarCentro} disabled={!isAdmin}>Guardar</button>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Empresas */}
+        <Card title="Empresas">
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input value={empresaNombre} onChange={e=>setEmpresaNombre(e.target.value)} placeholder="Nombre de empresa" className="w-full px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500" />
+              <button onClick={crearEmpresa} disabled={saving} className={cn('btn-primary', saving && 'opacity-60')}>{saving ? 'Creando…' : 'Crear'}</button>
+            </div>
+            <div className="max-h-72 overflow-auto border border-zinc-700 rounded-xl">
+              <table className="min-w-full text-sm">
+                <thead className="bg-zinc-900/60"><tr><th className="text-left px-3 py-2">Empresa</th><th className="text-left px-3 py-2">Estado</th><th className="text-left px-3 py-2">Acciones</th></tr></thead>
+                <tbody>
+                  {(empresas || []).map(e => (
+                    <tr key={e.id} className="odd:bg-zinc-900/30">
+                      <td className="px-3 py-2">{e.nombre}</td>
+                      <td className="px-3 py-2">{e.is_active ? 'Activa' : 'Inactiva'}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          <button onClick={() => setEmpresaSel(e.id)} className={cn('btn-ghost', empresaSel===e.id && 'ring-1 ring-blue-500')}>Seleccionar</button>
+                          <button onClick={() => toggleEmpresaActiva(e)} className={cn('btn', e.is_active ? 'btn-warn' : 'btn-primary')}>{e.is_active ? 'Desactivar' : 'Activar'}</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
 
-        <table style={tbl}>
-          <thead><tr>
-            <th style={thtd}>Centro</th><th style={thtd}>Zona</th><th style={thtd}>Inicio</th><th style={thtd}>Activo</th><th style={thtd}>ID</th><th style={thtd}>Acciones</th>
-          </tr></thead>
-          <tbody>
-            {centros.map(c=>(
-              <tr key={c.id}>
-                <td style={thtd}>{c.nombre}</td>
-                <td style={thtd}>{zonas.find(z=>z.id===c.zona_id)?.nombre || '—'}</td>
-                <td style={thtd}>{c.fecha_inicio || '—'}</td>
-                <td style={thtd}>{c.is_active ? 'Sí' : 'No'}</td>
-                <td style={thtd}><code>{c.id}</code></td>
-                <td style={thtd}>
-                  <button style={btn} onClick={()=>setCen({
-                    id:c.id, nombre:c.nombre, fecha_inicio:c.fecha_inicio || '', is_active:!!c.is_active, zona_id:c.zona_id || ''
-                  })}>Editar</button>
-                </td>
-              </tr>
-            ))}
-            {centros.length===0 && <tr><td style={thtd} colSpan={6}>No hay centros para esta empresa</td></tr>}
-          </tbody>
-        </table>
-      </section>
+        {/* Zonas */}
+        <Card title="Zonas">
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <select value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)} className="w-1/2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500">
+                <option value="">— Empresa —</option>
+                {(empresas || []).map(e => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
+              </select>
+              <input value={zonaNombre} onChange={e=>setZonaNombre(e.target.value)} placeholder="Nombre de zona" className="w-full px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500" />
+              <button onClick={crearZona} disabled={saving || !empresaSel} className={cn('btn-primary', (!empresaSel || saving) && 'opacity-60')}>Crear</button>
+            </div>
+            <div className="max-h-72 overflow-auto border border-zinc-700 rounded-xl">
+              <table className="min-w-full text-sm">
+                <thead className="bg-zinc-900/60"><tr><th className="text-left px-3 py-2">Zona</th><th className="text-left px-3 py-2">Acciones</th></tr></thead>
+                <tbody>
+                  {(zonas || []).map(z => (
+                    <tr key={z.id} className="odd:bg-zinc-900/30">
+                      <td className="px-3 py-2">{z.nombre}</td>
+                      <td className="px-3 py-2"><button onClick={()=>setZonaSel(z.id)} className={cn('btn-ghost', zonaSel===z.id && 'ring-1 ring-blue-500')}>Seleccionar</button></td>
+                    </tr>
+                  ))}
+                  {empresaSel && (zonas || []).length===0 && <tr><td className="px-3 py-3 text-zinc-400" colSpan={2}>Sin zonas</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
+
+        {/* Centros */}
+        <Card title="Centros">
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-2">
+              <select value={empresaSel} onChange={e=>setEmpresaSel(e.target.value)} className="px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500">
+                <option value="">— Empresa —</option>
+                {(empresas || []).map(e => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
+              </select>
+              <select value={zonaSel} onChange={e=>setZonaSel(e.target.value)} className="px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500">
+                <option value="">— Zona —</option>
+                {(zonas || []).map(z => (<option key={z.id} value={z.id}>{z.nombre}</option>))}
+              </select>
+              <input value={centroNombre} onChange={e=>setCentroNombre(e.target.value)} placeholder="Nombre del centro" className="px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500" />
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-zinc-300">Fecha inicio</label>
+                <input type="date" value={centroFecha} onChange={e=>setCentroFecha(e.target.value)} className="px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 outline-none focus:border-zinc-500" />
+              </div>
+              <button onClick={crearCentro} disabled={saving || !zonaSel || !centroNombre.trim()} className={cn('btn-primary', (saving || !zonaSel || !centroNombre.trim()) && 'opacity-60')}>Crear centro</button>
+            </div>
+
+            <div className="max-h-72 overflow-auto border border-zinc-700 rounded-xl">
+              <table className="min-w-full text-sm">
+                <thead className="bg-zinc-900/60"><tr><th className="text-left px-3 py-2">Centro</th><th className="text-left px-3 py-2">Inicio</th></tr></thead>
+                <tbody>
+                  {(centros || []).map(c => (
+                    <tr key={c.id} className="odd:bg-zinc-900/30">
+                      <td className="px-3 py-2">{c.nombre}</td>
+                      <td className="px-3 py-2">{c.fecha_inicio || '—'}</td>
+                    </tr>
+                  ))}
+                  {zonaSel && (centros || []).length===0 && <tr><td className="px-3 py-3 text-zinc-400" colSpan={2}>Sin centros</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }
