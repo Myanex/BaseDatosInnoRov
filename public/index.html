@@ -4,11 +4,31 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ROV • Demo Día 2 — Componentes</title>
+
+  <!-- Tailwind / htmx / Alpine -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Quita el 404 del favicon -->
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+
+  <!-- ENV y Supabase (el orden importa) -->
   <script src="/env.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+  <!-- Diagnóstico temprano -->
+  <script>
+    (function(){
+      // Diagnóstico simple en consola
+      if (!window.ENV || !window.ENV.SUPABASE_URL) {
+        console.error("[Diagnóstico] env.js no cargó o faltan claves.");
+      }
+      if (!window.supabase) {
+        console.error("[Diagnóstico] CDN de supabase-js no cargó.");
+      }
+    })();
+  </script>
 </head>
 <body class="bg-slate-950 text-slate-100">
   <header class="p-3 border-b border-slate-800 flex items-center justify-between">
@@ -76,6 +96,8 @@
     </section>
   </main>
 
+  <!-- Carga del módulo principal al final para asegurar DOM listo -->
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
+
