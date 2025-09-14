@@ -97,7 +97,12 @@
   </main>
 
   <!-- Carga del módulo principal al final para asegurar DOM listo -->
-<script type="module" src="/js/main.js"></script>
+<script type="module">
+  // Diagnóstico rápido: confirma versión del HTML que se está sirviendo
+  console.log("ROV Demo Día 2 — HTML v1.1 (W6-fix)");
+</script>
+<script type="module" src="/js/main.js?v=1.1"></script>
+
 
 </body>
 </html>
