@@ -3,33 +3,31 @@ import { supabase } from "./supabaseClient.js";
 
 const PAGE_SIZE = 10;
 
+/**
+ * Lee usuario y perfil (profiles) del usuario autenticado.
+ * RLS en profiles permite: el propio perfil o superroles (admin/dev/oficina).
+ */
 export async function getSessionProfile() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr) throw userErr;
   if (!user) return null;
+
   const { data, error } = await supabase
     .from("profiles")
     .select("email, role, centro_id, empresa_id, is_active")
     .eq("user_id", user.id)
     .maybeSingle();
+
   if (error) throw error;
   return { user, profile: data };
 }
 
+/**
+ * Lista componentes paginados desde la TABLA BASE `componentes`
+ * con nombres de tipo/estado/centro via joins de PostgREST.
+ * Esto respeta las policies RLS de `componentes`.
+ */
 export async function fetchComponentes({ page = 1, estado = "", tipo = "", soloActivos = true }) {
-  const PAGE_SIZE = 10;
-
-  // Embedding con alias:
-  // - tipo:   tipo_componente_id(nombre)
-  // - estado: estado_componente_id(nombre)
-  // - centro: centros(nombre) a través de centro_id
-  //
-  // IMPORTANTE: Esto asume que existen FKs:
-  //   componentes.tipo_componente_id  -> tipo_componente.id
-  //   componentes.estado_componente_id-> estado_componente.id
-  //   componentes.centro_id           -> centros.id
-  //
-  // Y que las tablas tipo_componente / estado_componente / centros permiten SELECT (ya aplicado).
-
   let q = supabase
     .from("componentes")
     .select(`
@@ -43,8 +41,6 @@ export async function fetchComponentes({ page = 1, estado = "", tipo = "", soloA
     `, { count: "exact" });
 
   if (soloActivos) q = q.eq("is_active", true);
-
-  // Filtros por NOMBRE en tablas relacionadas (vía alias)
   if (tipo)   q = q.ilike("tipo.nombre", `%${tipo}%`);
   if (estado) q = q.ilike("estado.nombre", `%${estado}%`);
 
@@ -57,7 +53,6 @@ export async function fetchComponentes({ page = 1, estado = "", tipo = "", soloA
 
   if (error) throw error;
 
-  // Adaptar a las columnas que espera la grilla
   const rows = (data ?? []).map(r => ({
     id: r.id,
     serie: r.serie,
@@ -75,30 +70,27 @@ export async function fetchComponentes({ page = 1, estado = "", tipo = "", soloA
   };
 }
 
-
-  return {
-    rows,
-    count: count ?? 0,
-    page,
-    pages: Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE)),
-  };
-}
-
-
+/**
+ * Ejecuta la baja lógica de un componente (RPC con reglas de negocio).
+ */
 export async function bajaLogica(id) {
   const { data, error } = await supabase.rpc("rpc_componente_baja_logica", {
     p_componente_id: id,
-    p_marcar_estado_baja: true,
+    p_marcar_estado_baja: true
   });
   if (error) throw error;
   return data;
 }
 
+/**
+ * Reporta una falla para un componente dentro del alcance del centro (RLS en RPC).
+ */
 export async function reportarFalla(id, detalle) {
   const { data, error } = await supabase.rpc("rpc_falla_registrar", {
     p_componente_id: id,
-    p_detalle: detalle,
+    p_detalle: detalle
   });
   if (error) throw error;
   return data;
 }
+
