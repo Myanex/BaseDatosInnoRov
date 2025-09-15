@@ -17,32 +17,64 @@ export async function getSessionProfile() {
 
 export async function fetchComponentes({ page = 1, estado = "", tipo = "", soloActivos = true }) {
   const PAGE_SIZE = 10;
+
+  // Embedding con alias:
+  // - tipo:   tipo_componente_id(nombre)
+  // - estado: estado_componente_id(nombre)
+  // - centro: centros(nombre) a través de centro_id
+  //
+  // IMPORTANTE: Esto asume que existen FKs:
+  //   componentes.tipo_componente_id  -> tipo_componente.id
+  //   componentes.estado_componente_id-> estado_componente.id
+  //   componentes.centro_id           -> centros.id
+  //
+  // Y que las tablas tipo_componente / estado_componente / centros permiten SELECT (ya aplicado).
+
   let q = supabase
-    .from("componentes") // ← usar tabla base, RLS estricta
-    .select("id, serie, tipo_componente_id, estado_componente_id, centro_id, is_active, created_at", { count: "exact" });
+    .from("componentes")
+    .select(`
+      id,
+      serie,
+      is_active,
+      created_at,
+      tipo:tipo_componente_id ( nombre ),
+      estado:estado_componente_id ( nombre ),
+      centro:centro_id ( nombre )
+    `, { count: "exact" });
 
   if (soloActivos) q = q.eq("is_active", true);
 
-  // Estos filtros ahora son por ID/serie (la tabla no tiene nombres).
-  // Si necesitas filtrar por NOMBRE de tipo/estado, lo vemos en el siguiente paso con joins de PostgREST.
-  if (estado) q = q.ilike("estado_componente_id", `%${estado}%`); // opcional si usas UUIDs => puedes quitar esta línea
-  if (tipo)   q = q.ilike("serie", `%${tipo}%`); // filtro simple sobre la serie por ahora
+  // Filtros por NOMBRE en tablas relacionadas (vía alias)
+  if (tipo)   q = q.ilike("tipo.nombre", `%${tipo}%`);
+  if (estado) q = q.ilike("estado.nombre", `%${estado}%`);
 
   const from = (page - 1) * PAGE_SIZE;
   const to   = from + PAGE_SIZE - 1;
 
-  const { data, error, count } = await q.range(from, to).order("created_at", { ascending: false });
+  const { data, error, count } = await q
+    .range(from, to)
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
 
-  // Adaptamos los nombres que mostraba la vista a lo que hay en la tabla
+  // Adaptar a las columnas que espera la grilla
   const rows = (data ?? []).map(r => ({
     id: r.id,
     serie: r.serie,
-    tipo_nombre: r.tipo_componente_id,     // por ahora mostramos el ID
-    estado_nombre: r.estado_componente_id, // por ahora mostramos el ID
-    centro_nombre: r.centro_id,            // por ahora mostramos el ID
+    tipo_nombre: r?.tipo?.nombre ?? "—",
+    estado_nombre: r?.estado?.nombre ?? "—",
+    centro_nombre: r?.centro?.nombre ?? "—",
     is_active: r.is_active
   }));
+
+  return {
+    rows,
+    count: count ?? 0,
+    page,
+    pages: Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE)),
+  };
+}
+
 
   return {
     rows,
