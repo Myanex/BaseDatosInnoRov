@@ -16,30 +16,42 @@ export async function getSessionProfile() {
 }
 
 export async function fetchComponentes({ page = 1, estado = "", tipo = "", soloActivos = true }) {
-  // Usa la vista; si aún no existe, puedes volver temporalmente a la tabla "componentes"
+  const PAGE_SIZE = 10;
   let q = supabase
-    .from("componentes_view_list")
-    .select("*", { count: "exact" });
+    .from("componentes") // ← usar tabla base, RLS estricta
+    .select("id, serie, tipo_componente_id, estado_componente_id, centro_id, is_active, created_at", { count: "exact" });
 
-  if (estado) q = q.ilike("estado_nombre", `%${estado}%`);
-  if (tipo)   q = q.ilike("tipo_nombre", `%${tipo}%`);
   if (soloActivos) q = q.eq("is_active", true);
+
+  // Estos filtros ahora son por ID/serie (la tabla no tiene nombres).
+  // Si necesitas filtrar por NOMBRE de tipo/estado, lo vemos en el siguiente paso con joins de PostgREST.
+  if (estado) q = q.ilike("estado_componente_id", `%${estado}%`); // opcional si usas UUIDs => puedes quitar esta línea
+  if (tipo)   q = q.ilike("serie", `%${tipo}%`); // filtro simple sobre la serie por ahora
 
   const from = (page - 1) * PAGE_SIZE;
   const to   = from + PAGE_SIZE - 1;
 
-  const { data, error, count } = await q
-    .range(from, to)
-    .order("created_at", { ascending: false });
-
+  const { data, error, count } = await q.range(from, to).order("created_at", { ascending: false });
   if (error) throw error;
+
+  // Adaptamos los nombres que mostraba la vista a lo que hay en la tabla
+  const rows = (data ?? []).map(r => ({
+    id: r.id,
+    serie: r.serie,
+    tipo_nombre: r.tipo_componente_id,     // por ahora mostramos el ID
+    estado_nombre: r.estado_componente_id, // por ahora mostramos el ID
+    centro_nombre: r.centro_id,            // por ahora mostramos el ID
+    is_active: r.is_active
+  }));
+
   return {
-    rows: data ?? [],
+    rows,
     count: count ?? 0,
     page,
     pages: Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE)),
   };
 }
+
 
 export async function bajaLogica(id) {
   const { data, error } = await supabase.rpc("rpc_componente_baja_logica", {
