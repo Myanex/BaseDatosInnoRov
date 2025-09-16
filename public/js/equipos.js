@@ -579,5 +579,71 @@ async function openReportarFallaModal(equipoId) {
 })();
 
 // === [END ADD] ===============================================================
+// === [BEGIN PATCH: Agregar botón “Reportar falla” en filas de Equipos] ==============
+// Asunción conservadora: cada <tr> de #eq-tbody tiene data-equipo-id; si no hay
+// celda de acciones con clase .eq-actions, se usa la **última celda** para insertar el botón.
+// Esto evita tocar tu render existente y es idempotente.
+
+(function installFallaButtonsEnhancer() {
+  const $ = window.$ || ((s, r = document) => r.querySelector(s));
+  const $$ = window.$$ || ((s, r = document) => [...r.querySelectorAll(s)]);
+
+  const tbody = $("#eq-tbody");
+  if (!tbody) return;
+
+  function ensureFallaButtons(root = tbody) {
+    const rows = $$("tr[data-equipo-id]", root);
+    for (const tr of rows) {
+      const equipoId = tr.dataset.equipoId;
+      if (!equipoId) continue;
+
+      // Busca contenedor de acciones o usa la última celda
+      let actionsCell = tr.querySelector(".eq-actions");
+      if (!actionsCell) {
+        const tds = tr.querySelectorAll("td");
+        if (tds.length === 0) continue;
+        actionsCell = tds[tds.length - 1];
+      }
+      if (!actionsCell) continue;
+
+      // Evita duplicados: ya existe un botón para este equipo
+      const already = actionsCell.querySelector('[data-action="falla"]');
+      if (already) {
+        // Asegura que tenga el data-equipo-id correcto
+        already.dataset.equipoId = equipoId;
+        continue;
+      }
+
+      // Crea botón compacto “Reportar falla”
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Reportar falla";
+      btn.dataset.action = "falla";
+      btn.dataset.equipoId = equipoId;
+      btn.className = "btn-falla";
+      btn.style.cssText =
+        "height:28px;padding:0 10px;margin-left:6px;background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:8px;font-size:12px;line-height:1.35";
+      actionsCell.appendChild(btn);
+    }
+  }
+
+  // Primera pasada
+  ensureFallaButtons();
+
+  // Observa cambios para listas re-renderizadas
+  const mo = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.type === "childList" && (m.addedNodes?.length || m.removedNodes?.length)) {
+        ensureFallaButtons();
+      }
+    }
+  });
+  mo.observe(tbody, { childList: true, subtree: true });
+
+  // Si tu código emite eventos tras refrescar equipos, engancha aquí también
+  document.addEventListener("equipos:list-refreshed", () => ensureFallaButtons());
+})();
+
+// === [END PATCH] =====================================================================
 
 
