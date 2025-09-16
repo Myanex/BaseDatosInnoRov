@@ -60,6 +60,8 @@ export async function fetchEquipos() {
 }
 
 export function renderEquipos(equipos) {
+  const wrap = document.createElement('div');
+  wrap.className = 'acciones flex gap-2';
   const tbody = document.querySelector("#eq-tbody");
   tbody.innerHTML = equipos.map(e => `
     <tr>
@@ -74,6 +76,14 @@ export function renderEquipos(equipos) {
         <button class="small" data-act="falla" data-id="${e.id}">⚠️ Falla</button>
       </td>
     </tr>`).join("");
+  
+  const btnFalla = document.createElement('button');
+  btnFalla.className = 'btn-secondary';
+  btnFalla.textContent = 'Reportar falla';
+  btnFalla.addEventListener('click', () => openModalFallaEquipo(equipo));
+  wrap.appendChild(btnFalla);
+
+  return wrap;
 }
 
 // =========== Modales ===========
@@ -235,6 +245,112 @@ async function modalFallaDesdeEquipo(equipoId){
     alert(`Falla creada: ${data}`);
   });
 }
+
+<script>
+/* --- Utilidades DOM de modal (si ya existen funciones equivalentes, puedes reutilizarlas) --- */
+const $modalFalla   = document.getElementById('modalFallaEquipo');
+const $selCompFalla = document.getElementById('fallaEquipoComponente');
+const $txtDetFalla  = document.getElementById('fallaEquipoDetalle');
+const $ttlFalla     = document.getElementById('fallaEquipoTitulo');
+const $btnFallaOK   = document.getElementById('btnFallaEquipoEnviar');
+const $btnFallaNo   = document.getElementById('btnFallaEquipoCancelar');
+
+let _equipoFallaCtx = null; // { id, codigo }
+
+/**
+ * Abre modal de falla para un equipo.
+ * Carga componentes ensamblados vigentes en ese equipo.
+ */
+async function openModalFallaEquipo(equipo) {
+  _equipoFallaCtx = { id: equipo.id, codigo: equipo.codigo };
+  $ttlFalla.textContent = `Equipo: ${equipo.codigo}`;
+  $txtDetFalla.value = '';
+
+  // 1) Leer vínculos vigentes en equipo_componente
+  const { data: vincs, error: errVincs } = await supabase
+    .from('equipo_componente')
+    .select('componente_id, fecha_fin')
+    .eq('equipo_id', equipo.id)
+    .is('fecha_fin', null);
+
+  if (errVincs) {
+    alert('Error cargando componentes ensamblados: ' + errVincs.message);
+    return;
+  }
+
+  // 2) Si no hay componentes, bloquear flujo
+  if (!vincs || vincs.length === 0) {
+    alert('Este equipo no tiene componentes ensamblados vigentes.');
+    return;
+  }
+
+  const compIds = vincs.map(v => v.componente_id);
+
+  // 3) Traer info básica de componentes para mostrar en el selector
+  const { data: comps, error: errComps } = await supabase
+    .from('componentes')
+    .select('id, serie, tipo_componente_id')
+    .in('id', compIds);
+
+  if (errComps) {
+    alert('Error cargando componentes: ' + errComps.message);
+    return;
+  }
+
+  // (opcional) nombre del tipo si tienes tabla y FK resueltas como join automático
+  // Para máxima compatibilidad, mostramos: SERIE (ID abreviado)
+  $selCompFalla.innerHTML = '';
+  comps.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.serie ?? 'sin_serie'} • ${String(c.id).slice(0,8)}`;
+    $selCompFalla.appendChild(opt);
+  });
+
+  $modalFalla.classList.remove('hidden');
+}
+
+/** Cierra modal */
+function closeModalFallaEquipo() {
+  $modalFalla.classList.add('hidden');
+  _equipoFallaCtx = null;
+}
+
+/** Envía RPC para reportar falla */
+async function submitFallaEquipo() {
+  if (!_equipoFallaCtx) return;
+  const componenteId = $selCompFalla.value;
+  const detalle      = $txtDetFalla.value?.trim() || '';
+
+  // Llamar RPC (Día 3 Parte 2 Paso 1)
+  const { data, error } = await supabase.rpc('rpc_equipo_reportar_falla', {
+    p_equipo_id: _equipoFallaCtx.id,
+    p_componente_id: componenteId,
+    p_detalle: detalle
+  });
+
+  if (error) {
+    alert('No se pudo reportar la falla: ' + (error.message || JSON.stringify(error)));
+    return;
+  }
+
+  // OK
+  closeModalFallaEquipo();
+  alert('Falla registrada con id: ' + data);
+
+  // Opcional: refrescar listas/estado UI
+  if (typeof listarEquipos === 'function') {
+    listarEquipos().catch(console.error);
+  }
+}
+
+/* Wire básico de botones del modal */
+$btnFallaOK?.addEventListener('click', submitFallaEquipo);
+$btnFallaNo?.addEventListener('click', closeModalFallaEquipo);
+$modalFalla?.addEventListener('click', (e) => {
+  if (e.target === $modalFalla) closeModalFallaEquipo();
+});
+
 
 // =========== Listeners ===========
 export function initEquiposUI(requestReload){
