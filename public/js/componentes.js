@@ -1,24 +1,28 @@
 import { supabase } from "./supabaseClient.js";
 
 // Modal util
-function openFormModal(html, onSubmit, withSubmit=true) {
+function openFormModal(html, onSubmit, withSubmit = true) {
   const dlg = document.querySelector("#modal-form");
   const form = document.querySelector("#modal-form-content");
-  form.innerHTML = html + (withSubmit ? `
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-      <button value="cancel">Cancelar</button>
-      <button id="modal-submit" value="submit">Guardar</button>
-    </div>` : `
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-      <button value="cancel">Cerrar</button>
-    </div>`
+  form.innerHTML = html + (
+    withSubmit
+      ? `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+           <button type="button" id="modal-cancel">Cancelar</button>
+           <button type="submit" id="modal-submit">Guardar</button>
+         </div>`
+      : `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+           <button type="button" id="modal-cancel">Cerrar</button>
+         </div>`
   );
-  dlg.showModal();
-  form.onsubmit = async (e)=>{
+
+  form.querySelector("#modal-cancel").onclick = () => dlg.close();
+  form.onsubmit = withSubmit ? async (e)=>{
     e.preventDefault();
     try { await onSubmit?.(new FormData(form)); dlg.close(); }
     catch(err){ alert(err.message || err); }
-  };
+  } : null;
+
+  dlg.showModal();
 }
 
 export async function fetchComponentes() {
