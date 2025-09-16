@@ -1,3 +1,4 @@
+# path: public/index.html
 <!doctype html>
 <html lang="es">
 <head>
@@ -19,8 +20,8 @@
     }
     #header-right{display:flex; gap:10px; align-items:center}
     main{max-width:1100px; margin:0 auto; padding:16px}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     .pill{padding:2px 8px; border:1px solid #334; border-radius:999px; font-size:12px; background:#0f1620}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     .muted{opacity:.75}
 
     /* Panels */
@@ -70,22 +71,12 @@
     }
     dialog form > *{margin-bottom:8px}
   </style>
-
-  <!-- Config y cliente Supabase (deben existir) -->
-  <script src="./env.js"></script>
-  <script src="./js/supabaseClient.js"></script>
-  <!-- Nuestra página -->
-  <script src="./js/equipos.js" defer></script>
-  <!-- (Opcional) si ya tienes estos archivos activos, déjalos; si no, omítelos -->
-  <script src="./js/auth.js" defer></script>
-  <script src="./js/main.js" defer></script>
-  <script src="./js/componentes.js" defer></script>
 </head>
 <body>
 <header>
   <div><strong>ROV · Inventario</strong></div>
-  <div id="session-badges" class="row muted"></div>
   <div id="header-right">
+    <div id="session-info" class="row muted"></div>
     <button id="btn-logout" class="small" style="display:none">Salir</button>
   </div>
 </header>
@@ -93,18 +84,11 @@
 <main>
   <!-- LOGIN -->
   <section id="view-auth" class="panel active">
-    <form onsubmit="return false">
-      <h3>Ingresar</h3>
-      <label>Email
-        <input id="auth-email" type="email" placeholder="tu@correo.com" />
-      </label>
-      <label>Contraseña
-        <input id="auth-pass" type="password" placeholder="••••••••" />
-      </label>
-      <div class="row">
-        <button id="btn-login">Entrar</button>
-        <span id="auth-msg" class="muted"></span>
-      </div>
+    <form id="form-login">
+      <label>Email<input type="email" id="email" required></label>
+      <label>Contraseña<input type="password" id="password" required></label>
+      <button type="submit">Entrar</button>
+      <div id="auth-alerts"></div>
     </form>
   </section>
 
@@ -117,69 +101,57 @@
 
     <section id="alerts"></section>
 
-    <!-- Página: Equipos -->
+    <!-- Equipos -->
     <section id="panel-equipos" class="panel active">
       <div class="toolbar">
-        <span class="muted">Verás equipos por RLS (centro) o todos si eres super-rol.</span>
+        <button id="eq-crear">➕ Crear equipo</button>
+        <button id="eq-refrescar">Refrescar</button>
       </div>
-
       <table>
         <thead>
           <tr>
-            <th style="width:160px">Código</th>
-            <th>Descripción</th>
-            <th style="width:260px">Componentes (ensamblados)</th>
-            <th style="width:200px">Acciones</th>
+            <th>Código</th>
+            <th>Rol</th>
+            <th>Centro</th>
+            <th>Componentes ensamblados</th>
+            <th>Acciones</th>
           </tr>
         </thead>
-        <tbody id="tbl-equipos-body"></tbody>
+        <tbody id="eq-tbody"></tbody>
       </table>
-      <div id="equipos-info" class="muted" style="margin-top:6px">—</div>
     </section>
 
-    <!-- Página: Componentes (placeholder) -->
+    <!-- Componentes -->
     <section id="panel-componentes" class="panel">
-      <p class="muted">Usa la pestaña Equipos para “Reportar falla”.</p>
+      <div class="toolbar">
+        <button id="co-refrescar">Refrescar</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Serie</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Ubicación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="co-tbody"></tbody>
+      </table>
     </section>
   </section>
 </main>
 
-<!-- Modal: Reportar falla (dialog) -->
-<dialog id="dlg-falla-equipo">
-  <form method="dialog">
-    <h3 style="margin:0 0 8px">Reportar falla</h3>
-    <div id="dlg-falla-equipo-titulo" class="muted" style="margin-bottom:6px">Equipo: —</div>
-
-    <label>Componente ensamblado
-      <select id="falla-comp"></select>
-    </label>
-
-    <label>Detalle
-      <textarea id="falla-det" placeholder="Describe la falla..."></textarea>
-    </label>
-
-    <div class="row" style="justify-content:flex-end; margin-top:8px">
-      <button id="btn-falla-cancel" class="small" value="cancel">Cancelar</button>
-      <button id="btn-falla-send" class="small" value="default">Reportar</button>
-    </div>
-  </form>
+<!-- MODALES -->
+<dialog id="modal-form">
+  <form method="dialog" id="modal-form-content"></form>
 </dialog>
 
-<script>
-  // Tabs simples (sin depender de otros scripts)
-  document.addEventListener('DOMContentLoaded', () => {
-    const tabs = document.querySelectorAll('nav.tabs button');
-    const pEq  = document.getElementById('panel-equipos');
-    const pCo  = document.getElementById('panel-componentes');
-    tabs.forEach(btn => btn.addEventListener('click', () => {
-      tabs.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.getAttribute('data-tab');
-      pEq.classList.toggle('active', tab === 'equipos');
-      pCo.classList.toggle('active', tab === 'componentes');
-    }));
-  });
-</script>
+<!-- Librería Supabase y módulos de la app -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script type="module" src="./env.js"></script>
+<script type="module" src="./js/main.js"></script>
 </body>
 </html>
+
 
