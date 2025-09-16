@@ -1,20 +1,31 @@
 import { supabase } from "./supabaseClient.js";
 
 // Utilidad modal
-function openFormModal(html, onSubmit) {
+function openFormModal(html, onSubmit, withSubmit = true) {
   const dlg = document.querySelector("#modal-form");
   const form = document.querySelector("#modal-form-content");
-  form.innerHTML = html + `
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-      <button value="cancel">Cancelar</button>
-      <button id="modal-submit" value="submit">Guardar</button>
-    </div>`;
-  dlg.showModal();
-  form.onsubmit = async (e)=>{
+  form.innerHTML = html + (
+    withSubmit
+      ? `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+           <button type="button" id="modal-cancel">Cancelar</button>
+           <button type="submit" id="modal-submit">Guardar</button>
+         </div>`
+      : `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+           <button type="button" id="modal-cancel">Cerrar</button>
+         </div>`
+  );
+
+  // Cerrar sin validar
+  form.querySelector("#modal-cancel").onclick = () => dlg.close();
+
+  // Solo enganchar submit cuando hay botón de guardar
+  form.onsubmit = withSubmit ? async (e) => {
     e.preventDefault();
-    try { await onSubmit(new FormData(form)); dlg.close(); }
+    try { await onSubmit?.(new FormData(form)); dlg.close(); }
     catch(err){ alert(err.message || err); }
-  };
+  } : null;
+
+  dlg.showModal();
 }
 
 // =========== Data ===========
@@ -130,12 +141,20 @@ async function modalEditarEquipo(equipoId, onDone){
 }
 
 async function modalEnsamblar(equipoId, onDone){
-  // Listar componentes “libres” o en tu centro (RLS limitará)
   const { data: comps, error } = await supabase
     .from("componentes")
     .select("id,serie,is_active,centro_id,tipo:tipo_componente_id(nombre),estado:estado_componente_id(nombre)")
     .order("serie").limit(200);
   if(error) throw new Error(error.message);
+
+  // Si no hay componentes disponibles, abrir modal informativo sin submit
+  if (!comps || !comps.length) {
+    openFormModal(`
+      <h4 style="margin:0 0 8px">Ensamblar componente</h4>
+      <p class="muted">No hay componentes disponibles para ensamblar.</p>
+    `, null, /* withSubmit */ false);
+    return;
+  }
 
   openFormModal(`
     <h4 style="margin:0 0 8px">Ensamblar componente</h4>
@@ -162,7 +181,7 @@ async function modalEnsamblar(equipoId, onDone){
     });
     if(e2) throw new Error(e2.message);
     onDone?.(data);
-  });
+  }, /* withSubmit */ true);
 }
 
 async function modalQuitar(equipoId, onDone){
