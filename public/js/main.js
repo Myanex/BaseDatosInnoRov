@@ -1,7 +1,7 @@
-import { supabase, whoami, fetchProfileAndCentro } from "./supabaseClient.js";
+import { whoami } from "./supabaseClient.js";
 import { checkSession, login, logout } from "./auth.js";
-import { fetchEquipos, renderEquipos } from "./equipos.js";
-import { fetchComponentes, renderComponentes } from "./componentes.js";
+import { fetchEquipos, renderEquipos, initEquiposUI } from "./equipos.js";
+import { fetchComponentes, renderComponentes, initComponentesUI } from "./componentes.js";
 
 function switchTab(tab) {
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
@@ -14,25 +14,20 @@ async function renderHeaderSession() {
   const me = await whoami();
   const sessionInfo = document.querySelector("#session-info");
   const btnLogout = document.querySelector("#btn-logout");
+  if (!me) { sessionInfo.textContent = ""; btnLogout.style.display="none"; return; }
 
-  if (!me) {
-    sessionInfo.textContent = "";
-    btnLogout.style.display = "none";
-    return;
-  }
-
-  const info = await fetchProfileAndCentro(me.user_id, me.centro_id);
-
+  // email/rol/centro nombre desde perfiles + centros (ya lo resolvimos en archivos previos)
+  const prof = await (await import("./supabaseClient.js")).fetchProfileAndCentro(me.user_id, me.centro_id);
   sessionInfo.innerHTML = `
-    <span class="pill">Usuario: <strong>${info.email ?? "—"}</strong></span>
-    <span class="pill">Rol: <strong>${info.role ?? me.role ?? "—"}</strong></span>
-    <span class="pill">Centro: <strong>${info.centro_nombre ?? "—"}</strong></span>
+    <span class="pill">Usuario: <strong>${prof.email ?? "—"}</strong></span>
+    <span class="pill">Rol: <strong>${prof.role ?? me.role ?? "—"}</strong></span>
+    <span class="pill">Centro: <strong>${prof.centro_nombre ?? "—"}</strong></span>
   `;
-  btnLogout.style.display = "inline-block";
+  btnLogout.style.display="inline-block";
 }
 
 async function init() {
-  // Login form
+  // Login
   document.querySelector("#form-login").addEventListener("submit", async ev=>{
     ev.preventDefault();
     const email = document.querySelector("#email").value.trim();
@@ -46,7 +41,6 @@ async function init() {
     }
   });
 
-  // Header logout
   document.querySelector("#btn-logout").onclick = logout;
 
   // Tabs
@@ -58,9 +52,9 @@ async function init() {
     });
   });
 
-  // Refrescar
-  document.querySelector("#eq-refrescar").onclick = loadEquipos;
-  document.querySelector("#co-refrescar").onclick = loadComponentes;
+  // Inicializar listeners por pestaña (botones, modales)
+  initEquiposUI(loadEquipos);
+  initComponentesUI(loadComponentes);
 
   // Arranque
   const me = await checkSession();
