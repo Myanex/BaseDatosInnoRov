@@ -2,108 +2,343 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
+  <title>Inventario · Equipos — Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ROV • Demo Día 2 — Componentes</title>
-
-  <!-- Tailwind / htmx / Alpine -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
-  <!-- Quita el 404 del favicon -->
-  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-
-  <!-- ENV y Supabase (el orden importa) -->
-  <script src="/env.js"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-  <!-- Diagnóstico temprano -->
-  <script>
-    (function(){
-      // Diagnóstico simple en consola
-      if (!window.ENV || !window.ENV.SUPABASE_URL) {
-        console.error("[Diagnóstico] env.js no cargó o faltan claves.");
-      }
-      if (!window.supabase) {
-        console.error("[Diagnóstico] CDN de supabase-js no cargó.");
-      }
-    })();
-  </script>
+  <style>
+    :root{color-scheme:dark light}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;margin:0;background:#0b0f14;color:#e6ebf0}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 18px;background:#111827;border-bottom:1px solid #223}
+    .env{font-size:12px;opacity:.7}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .pill{padding:4px 8px;border:1px solid #334; border-radius:999px;font-size:12px;background:#0f1620}
+    main{padding:18px;max-width:1200px;margin:auto}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    input,select,button,textarea{background:#0f1620;color:#e6ebf0;border:1px solid #334;border-radius:8px;padding:8px 10px}
+    button{cursor:pointer}
+    button[disabled]{opacity:.5;cursor:not-allowed}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    th,td{text-align:left;padding:10px 12px;vertical-align:top}
+    tbody tr{background:#0d141d;border:1px solid #223}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .muted{opacity:.7}
+    .tag{display:inline-block;background:#192333;border:1px solid #294; padding:2px 6px;border-radius:6px;font-size:12px;margin-right:6px}
+    .err{white-space:pre-wrap;background:#2a0f14;border:1px solid #722;padding:8px 10px;border-radius:8px;margin:10px 0;color:#ffd2d2}
+    .ok{white-space:pre-wrap;background:#122816;border:1px solid #294;padding:8px 10px;border-radius:8px;margin:10px 0;color:#cfe9cf}
+    details{background:#0f1620;border:1px solid #334;border-radius:8px;padding:8px 10px}
+    summary{cursor:pointer}
+    small{opacity:.8}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100">
-  <header class="p-3 border-b border-slate-800 flex items-center justify-between">
-    <div class="text-lg font-semibold">ROV • Demo Día 2</div>
-    <div id="session-info" class="text-sm opacity-80"></div>
-  </header>
+<body>
+<header>
+  <div class="row">
+    <strong>Inventario / Equipos — Demo</strong>
+    <span class="env">Entorno: Demo (RLS activo · RPC)</span>
+  </div>
+  <div id="session-info" class="row muted"></div>
+</header>
 
-  <main class="max-w-6xl mx-auto p-4 space-y-6">
-    <div class="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-200">
-      Entorno Demo — datos de prueba, sujetos a RLS.
+<main>
+  <section class="toolbar">
+    <label>Centro:
+      <select id="f-centro"></select>
+    </label>
+    <label>Rol de equipo:
+      <select id="f-rol"></select>
+    </label>
+    <label>Activo:
+      <select id="f-activo">
+        <option value="">(todos)</option>
+        <option value="true" selected>Sí</option>
+        <option value="false">No</option>
+      </select>
+    </label>
+    <button id="btn-refrescar">Refrescar</button>
+    <span id="flash" class="muted"></span>
+  </section>
+
+  <section id="alerts"></section>
+
+  <section>
+    <div class="row" style="justify-content:space-between; margin:10px 0;">
+      <h3 style="margin:0">Equipos</h3>
+      <div class="row">
+        <button id="btn-crear" title="Solo super-roles">➕ Crear equipo</button>
+        <button id="btn-logout">Salir</button>
+      </div>
     </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Rol</th>
+          <th>Centro vigente</th>
+          <th>Componentes montados</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+</main>
 
-    <!-- LOGIN -->
-    <section class="space-y-3">
-      <h2 class="text-xl font-semibold">Login</h2>
-      <div class="flex gap-2">
-        <input id="email" type="email" placeholder="email@demo.cl" class="px-3 py-2 rounded bg-slate-900 border border-slate-700 w-72">
-        <input id="pass" type="password" placeholder="********" class="px-3 py-2 rounded bg-slate-900 border border-slate-700 w-48">
-        <button id="btn-login" class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500">Ingresar</button>
-        <button id="btn-logout" class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600">Logout</button>
-      </div>
-    </section>
+<!-- Supabase v2 -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
-    <!-- FILTROS -->
-    <section class="space-y-2">
-      <h2 class="text-xl font-semibold">Componentes</h2>
-      <div class="flex flex-wrap gap-2">
-        <select id="f-estado" class="px-3 py-2 rounded bg-slate-900 border border-slate-700">
-          <option value="">Estado (todos)</option>
-          <option value="operativo">Operativo</option>
-          <option value="baja">Baja</option>
-        </select>
-        <input id="f-tipo" placeholder="Tipo contiene…" class="px-3 py-2 rounded bg-slate-900 border border-slate-700">
-        <label class="inline-flex items-center gap-2 text-sm">
-          <input id="f-solo-activos" type="checkbox" class="accent-emerald-500" checked>
-          Solo activos
-        </label>
-        <button id="btn-refrescar" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Refrescar</button>
-      </div>
-    </section>
-
-    <!-- GRILLA -->
-    <section>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-900">
-            <tr>
-              <th class="text-left p-2">Serie</th>
-              <th class="text-left p-2">Tipo</th>
-              <th class="text-left p-2">Estado</th>
-              <th class="text-left p-2">Centro</th>
-              <th class="text-left p-2">Activo</th>
-              <th class="text-left p-2">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tbody" class="divide-y divide-slate-800"></tbody>
-        </table>
-      </div>
-
-      <div class="flex items-center gap-2 mt-3">
-        <button id="prev" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-40">Prev</button>
-        <span id="page" class="text-xs opacity-70">1</span>
-        <button id="next" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-40">Next</button>
-      </div>
-    </section>
-  </main>
-
-  <!-- Carga del módulo principal al final para asegurar DOM listo -->
 <script type="module">
-  // Diagnóstico rápido: confirma versión del HTML que se está sirviendo
-  console.log("ROV Demo Día 2 — HTML v1.1 (W6-fix)");
+/* ========= ENV ========= */
+const ENV = {
+  SUPABASE_URL: "https://gylndpvsjifxdlzcqqmh.supabase.co",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5bG5kcHZzamlmeGRsemNxcW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc4NTQyNjUsImV4cCI6MjA3MzQzMDI2NX0.REi4s98xlTYDKNj5nuaiZuosQEuBt42SuAiWNlm5d_8"
+};
+/* ======================= */
+
+const supabase = window.supabase.createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY);
+const $ = (s, r=document)=> r.querySelector(s);
+const $$= (s, r=document)=> [...r.querySelectorAll(s)];
+const flash = (t, ms=1200)=>{ const el=$("#flash"); el.textContent=t; setTimeout(()=>el.textContent="",ms); };
+const alertBox = (html, cls='err')=>{
+  const a=$("#alerts");
+  const div=document.createElement('div');
+  div.className=cls;
+  div.innerHTML=html;
+  a.prepend(div);
+  setTimeout(()=>div.remove(), 5000);
+};
+
+let SESSION = { role:null, centro_id:null, user_id:null };
+
+async function whoami(){
+  // requiere rpc_whoami() del backend
+  const { data, error } = await supabase.rpc('rpc_whoami');
+  if(error){ alertBox(`rpc_whoami error:\n${error.message}`); return; }
+  const row = Array.isArray(data)&&data.length? data[0]: data;
+  SESSION.role = row?.role ?? null;
+  SESSION.centro_id = row?.centro_id ?? null;
+  SESSION.user_id = row?.user_id ?? null;
+  // Render header
+  $("#session-info").innerHTML = `
+    <span class="pill">Rol: <strong>${SESSION.role ?? '—'}</strong></span>
+    <span class="pill">Centro: <strong>${SESSION.centro_id ?? '—'}</strong></span>
+    <span class="pill">User: <strong>${SESSION.user_id?.slice(0,8) ?? '—'}</strong></span>
+  `;
+  // Toggle botones por rol
+  const superRole = ['admin','dev','oficina'].includes(SESSION.role);
+  $("#btn-crear").disabled = !superRole;
+}
+
+async function loadFiltros(){
+  // Centros (lectura pública por policy)
+  {
+    const { data, error } = await supabase.from('centros').select('id,nombre').order('nombre',{ascending:true});
+    if(error){ alertBox(`Error centros:\n${error.message}`); }
+    const sel = $("#f-centro");
+    sel.innerHTML = `<option value="">(todos)</option>` + (data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+    if(SESSION.role==='centro' && SESSION.centro_id){ sel.value = SESSION.centro_id; sel.disabled=true; }
+  }
+  // rol_equipo
+  {
+    const { data, error } = await supabase.from('rol_equipo').select('id,nombre').order('nombre',{ascending:true});
+    if(error){ alertBox(`Error rol_equipo:\n${error.message}`); }
+    const sel = $("#f-rol");
+    sel.innerHTML = `<option value="">(todos)</option>` + (data||[]).map(r=>`<option value="${r.id}">${r.nombre}</option>`).join('');
+  }
+}
+
+async function fetchEquipos(){
+  const centro = $("#f-centro").value || null;
+  const rol = $("#f-rol").value || null;
+  const activo = $("#f-activo").value;
+
+  // 1) Traer equipos visibles (RLS filtra por centro si rol=centro)
+  let query = supabase.from('equipos')
+    .select('id,codigo,rol_equipo_id,is_active,rol:rol_equipo_id(nombre)')
+    .order('codigo',{ascending:true});
+
+  if(rol) query = query.eq('rol_equipo_id', rol);
+  if(activo !== '') query = query.eq('is_active', activo === 'true');
+
+  let { data: equipos, error } = await query;
+  if(error){ alertBox(`Error equipos:\n${error.message}`); return []; }
+
+  // 2) Obtener asignación vigente por equipo
+  const ids = equipos.map(e=>e.id);
+  let asign = [];
+  if(ids.length){
+    const { data, error: e2 } = await supabase.from('equipo_asignacion')
+      .select('equipo_id,centro_id,centro:centro_id(nombre)')
+      .is('fecha_fin', null)
+      .in('equipo_id', ids);
+    if(e2){ alertBox(`Error asignación:\n${e2.message}`); }
+    asign = data || [];
+  }
+
+  // 3) Si el filtro de centro está definido (y somos super-rol), aplicarlo manualmente
+  if(centro && ['admin','dev','oficina'].includes(SESSION.role)){
+    const setOK = new Set(asign.filter(a=>a.centro_id===centro).map(a=>a.equipo_id));
+    equipos = equipos.filter(e=> setOK.has(e.id));
+  }
+
+  // 4) Para cada equipo, traer componentes montados vigentes (pequeño N; dataset bajo 30)
+  for(const e of equipos){
+    const { data: comps, error: e3 } = await supabase
+      .from('equipo_componente')
+      .select('id,es_opcional,componente:componente_id(serie,tipo_componente_id,tipo:tipo_componente_id(nombre))')
+      .eq('equipo_id', e.id)
+      .is('fecha_fin', null);
+    if(e3){ alertBox(`Error componentes equipo ${e.codigo}:\n${e3.message}`); e._comps=[]; continue; }
+    e._comps = (comps||[]).map(x=>({ id:x.id, serie:x.componente?.serie, tipo_id:x.componente?.tipo_componente_id, tipo_nombre:x.componente?.tipo?.nombre, es_opcional:x.es_opcional }));
+    e._asign = asign.find(a=>a.equipo_id===e.id) || null;
+  }
+
+  return equipos;
+}
+
+function rowEquipo(e){
+  const superRole = ['admin','dev','oficina'].includes(SESSION.role);
+  const centroNom = e._asign?.centro?.nombre ?? '—';
+  const comps = e._comps||[];
+  const compTags = comps.length ? comps.map(c=>`<span class="tag">${c.tipo_nombre ?? 'tipo?'} · ${c.serie ?? ''}</span>`).join('') : '<span class="muted">—</span>';
+
+  const actionsSuper = `
+    <button data-act="editar" data-id="${e.id}">✏️ Editar</button>
+    <button data-act="agregar" data-id="${e.id}">🧩 Agregar componente</button>
+    <button data-act="quitar" data-id="${e.id}">➖ Quitar componente</button>
+  `;
+  const actionsCentro = `
+    <button data-act="falla" data-id="${e.id}">⚠️ Reportar falla</button>
+  `;
+
+  return `
+    <tr>
+      <td><strong>${e.codigo}</strong><br><small class="muted">${e.is_active ? 'Activo' : 'Inactivo'}</small></td>
+      <td>${e.rol?.nombre ?? '—'}</td>
+      <td>${centroNom}</td>
+      <td>${compTags}</td>
+      <td class="actions">
+        ${superRole ? actionsSuper : ''}
+        ${SESSION.role==='centro' || superRole ? actionsCentro : ''}
+      </td>
+    </tr>
+  `;
+}
+
+async function render(){
+  const equipos = await fetchEquipos();
+  $("#tbody").innerHTML = equipos.map(rowEquipo).join('') || `<tr><td colspan="5" class="muted">Sin resultados</td></tr>`;
+}
+
+function parsePgErrorMessage(msg){
+  // Nuestros RAISE vienen como "403: texto...", "409: texto..."
+  const m = /^(\d{3}):\s*(.*)$/s.exec(msg || '');
+  if(!m) return {code:null, text: msg};
+  return {code: m[1], text:m[2]};
+}
+
+async function crearEquipo(){
+  const codigo = prompt("Código de equipo (único):");
+  if(!codigo) return;
+  const { data: roles } = await supabase.from('rol_equipo').select('id,nombre').order('nombre',{ascending:true});
+  const rol = prompt(`Rol de equipo (elige id):\n${(roles||[]).map(r=>`${r.nombre}: ${r.id}`).join('\n')}`);
+  if(!rol) return;
+  const desc = prompt("Descripción (opcional):") || '';
+  const { data: centros } = await supabase.from('centros').select('id,nombre').order('nombre',{ascending:true});
+  const centro = prompt(`Centro asignación vigente (elige id):\n${(centros||[]).map(c=>`${c.nombre}: ${c.id}`).join('\n')}`);
+  if(!centro) return;
+
+  const { data, error } = await supabase.rpc('rpc_equipo_crear', { p_codigo: codigo, p_rol_equipo_id: rol, p_descripcion: desc, p_centro_id: centro });
+  if(error){ const {code,text}=parsePgErrorMessage(error.message); alertBox(`Crear equipo — ${code??''}\n${text??error.message}`); return; }
+  alertBox(`Equipo creado: ${data}`, 'ok');
+  render();
+}
+
+async function editarEquipo(id){
+  const { data: e1, error: eerr } = await supabase.from('equipos').select('id,codigo,rol_equipo_id,descripcion,is_active').eq('id', id).single();
+  if(eerr){ alertBox(`Cargar equipo:\n${eerr.message}`); return; }
+  const newCodigo = prompt("Nuevo código:", e1.codigo) ?? e1.codigo;
+  const newDesc = prompt("Descripción:", e1.descripcion ?? '') ?? e1.descripcion ?? '';
+  const newActive = confirm("¿Dejar ACTIVO? (Aceptar=Sí · Cancelar=No)");
+  const rolId = e1.rol_equipo_id; // para simplificar edición de rol, podrías pedirlo también
+  const { data, error } = await supabase.rpc('rpc_equipo_editar', { p_equipo_id:id, p_codigo:newCodigo, p_rol_equipo_id:rolId, p_descripcion:newDesc, p_is_active:newActive });
+  if(error){ const {code,text}=parsePgErrorMessage(error.message); alertBox(`Editar equipo — ${code??''}\n${text??error.message}`); return; }
+  alertBox(`Equipo editado: ${data}`, 'ok');
+  render();
+}
+
+async function agregarComponente(id){
+  // Elegir componente por ID (para demo). Podríamos filtrar por centro o tipo desde la UI.
+  const { data: libres, error } = await supabase
+    .from('componentes')
+    .select('id,serie,tipo:tipo_componente_id(nombre),is_active,estado:estado_componente_id(nombre),centro_id')
+    .order('serie',{ascending:true})
+    .limit(100);
+  if(error){ alertBox(`Listar componentes:\n${error.message}`); return; }
+  const pick = prompt(`ID de componente a montar:\n${(libres||[]).map(c=>`${c.serie} · ${c.tipo?.nombre} · activo:${c.is_active} · estado:${c.estado?.nombre} · id:${c.id}`).join('\n')}`);
+  if(!pick) return;
+  const esOpc = confirm("¿Marcar como opcional?");
+  const { data: out, error: e2 } = await supabase.rpc('rpc_equipo_agregar_componente', { p_equipo_id:id, p_componente_id: pick, p_es_opcional: esOpc });
+  if(e2){ const {code,text}=parsePgErrorMessage(e2.message); alertBox(`Agregar componente — ${code??''}\n${text??e2.message}`); return; }
+  alertBox(`Componente montado (ec.id): ${out}`, 'ok');
+  render();
+}
+
+async function quitarComponente(id){
+  // Mostrar componentes vigentes del equipo y pedir ID de componente
+  const { data: comps, error } = await supabase
+    .from('equipo_componente')
+    .select('componente:componente_id(id,serie,tipo:tipo_componente_id(nombre))')
+    .eq('equipo_id', id).is('fecha_fin', null);
+  if(error){ alertBox(`Listar montados:\n${error.message}`); return; }
+  const pick = prompt(`ID de componente a QUITAR (vigentes):\n${(comps||[]).map(c=>`${c.componente?.serie} · ${c.componente?.tipo?.nombre} · id:${c.componente?.id}`).join('\n')}`);
+  if(!pick) return;
+  const { data: out, error: e2 } = await supabase.rpc('rpc_equipo_quitar_componente', { p_equipo_id:id, p_componente_id: pick });
+  if(e2){ const {code,text}=parsePgErrorMessage(e2.message); alertBox(`Quitar componente — ${code??''}\n${text??e2.message}`); return; }
+  alertBox(`Componente quitado (ec.id): ${out}`, 'ok');
+  render();
+}
+
+async function reportarFalla(id){
+  // Elegir uno de los componentes montados vigentes
+  const { data: comps, error } = await supabase
+    .from('equipo_componente')
+    .select('componente:componente_id(id,serie,tipo:tipo_componente_id(nombre))')
+    .eq('equipo_id', id).is('fecha_fin', null);
+  if(error){ alertBox(`Listar montados:\n${error.message}`); return; }
+  if(!(comps||[]).length){ alertBox('No hay componentes montados para reportar falla'); return; }
+  const pick = prompt(`Elegir componente para falla (ID):\n${comps.map(c=>`${c.componente?.serie} · ${c.componente?.tipo?.nombre} · id:${c.componente?.id}`).join('\n')}`);
+  if(!pick) return;
+  const detalle = prompt("Detalle de la falla:") || '(sin detalle)';
+  const { data, error: e2 } = await supabase.rpc('rpc_equipo_reportar_falla',{ p_equipo_id: id, p_componente_id: pick, p_detalle: detalle });
+  if(e2){ const {code,text}=parsePgErrorMessage(e2.message); alertBox(`Reportar falla — ${code??''}\n${text??e2.message}`); return; }
+  alertBox(`Falla creada: ${data}`, 'ok');
+}
+
+function wire(){
+  $("#btn-refrescar").addEventListener('click', ()=>render());
+  $("#btn-crear").addEventListener('click', ()=>crearEquipo());
+  $("#btn-logout").addEventListener('click', async ()=>{
+    await supabase.auth.signOut(); location.reload();
+  });
+  $("#tbody").addEventListener('click', (ev)=>{
+    const btn = ev.target.closest('button[data-act]');
+    if(!btn) return;
+    const id = btn.dataset.id, act = btn.dataset.act;
+    if(act==='editar') editarEquipo(id);
+    if(act==='agregar') agregarComponente(id);
+    if(act==='quitar') quitarComponente(id);
+    if(act==='falla') reportarFalla(id);
+  });
+}
+
+(async function init(){
+  wire();
+  await whoami();
+  await loadFiltros();
+  await render();
+  flash('Listo ✔');
+})();
 </script>
-<script type="module" src="/js/main.js?v=1.1"></script>
-
-
 </body>
 </html>
 
