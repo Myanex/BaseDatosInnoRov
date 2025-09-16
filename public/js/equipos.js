@@ -1,10 +1,27 @@
 import { supabase } from "./supabaseClient.js";
 
+// Utilidad modal
+function openFormModal(html, onSubmit) {
+  const dlg = document.querySelector("#modal-form");
+  const form = document.querySelector("#modal-form-content");
+  form.innerHTML = html + `
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button value="cancel">Cancelar</button>
+      <button id="modal-submit" value="submit">Guardar</button>
+    </div>`;
+  dlg.showModal();
+  form.onsubmit = async (e)=>{
+    e.preventDefault();
+    try { await onSubmit(new FormData(form)); dlg.close(); }
+    catch(err){ alert(err.message || err); }
+  };
+}
+
+// =========== Data ===========
 export async function fetchEquipos() {
-  // Equipos visibles (RLS ya aplica)
   const { data: equipos, error } = await supabase
     .from("equipos")
-    .select("id,codigo,rol:rol_equipo_id(nombre),is_active")
+    .select("id,codigo,rol_equipo_id,rol:rol_equipo_id(nombre),is_active")
     .order("codigo");
   if (error) return [];
 
@@ -36,14 +53,188 @@ export function renderEquipos(equipos) {
   tbody.innerHTML = equipos.map(e => `
     <tr>
       <td><strong>${e.codigo}</strong><br><small class="muted">${e.is_active ? "Activo" : "Inactivo"}</small></td>
-      <td>${e.rol?.nombre ?? "—"}</td>
+      <td data-rol="${e.rol_equipo_id}">${e.rol?.nombre ?? "—"}</td>
       <td>${e._centro_nombre}</td>
       <td>${e._comps.map(c=>`<span class="tag">${c}</span>`).join("") || "—"}</td>
-      <td>
-        <button data-act="editar" data-id="${e.id}">✏️ Editar</button>
-        <button data-act="ensamblar" data-id="${e.id}">🧩 Ensamblar</button>
-        <button data-act="falla" data-id="${e.id}">⚠️ Falla</button>
+      <td class="actions">
+        <button class="small" data-act="editar" data-id="${e.id}">✏️ Editar</button>
+        <button class="small" data-act="ensamblar" data-id="${e.id}">🧩 Ensamblar</button>
+        <button class="small" data-act="quitar" data-id="${e.id}">➖ Quitar</button>
+        <button class="small" data-act="falla" data-id="${e.id}">⚠️ Falla</button>
       </td>
     </tr>`).join("");
+}
+
+// =========== Modales ===========
+async function modalCrearEquipo(onDone){
+  // Catálogos
+  const { data: roles } = await supabase.from("rol_equipo").select("id,nombre").order("nombre");
+  const { data: centros } = await supabase.from("centros").select("id,nombre").order("nombre");
+
+  openFormModal(`
+    <h4 style="margin:0 0 8px">Crear equipo</h4>
+    <label>Código<input name="codigo" required></label>
+    <label>Rol
+      <select name="rol" required>
+        <option value="">—</option>
+        ${(roles||[]).map(r=>`<option value="${r.id}">${r.nombre}</option>`).join("")}
+      </select>
+    </label>
+    <label>Descripción<textarea name="desc" rows="3" placeholder="Opcional"></textarea></label>
+    <label>Centro (asignación vigente)
+      <select name="centro" required>
+        <option value="">—</option>
+        ${(centros||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join("")}
+      </select>
+    </label>
+  `, async (fd)=>{
+    const { data, error } = await supabase.rpc("rpc_equipo_crear", {
+      p_codigo: fd.get("codigo"),
+      p_rol_equipo_id: fd.get("rol"),
+      p_descripcion: fd.get("desc") || "",
+      p_centro_id: fd.get("centro"),
+    });
+    if(error) throw new Error(error.message);
+    onDone?.(data);
+  });
+}
+
+async function modalEditarEquipo(equipoId, onDone){
+  const { data: e1, error } = await supabase.from("equipos")
+    .select("id,codigo,rol_equipo_id,descripcion,is_active")
+    .eq("id", equipoId).single();
+  if(error) throw new Error(error.message);
+
+  openFormModal(`
+    <h4 style="margin:0 0 8px">Editar equipo</h4>
+    <label>Código<input name="codigo" required value="${e1.codigo}"></label>
+    <label>Descripción<textarea name="desc" rows="3">${e1.descripcion ?? ""}</textarea></label>
+    <label>Activo
+      <select name="activo">
+        <option value="true" ${e1.is_active?'selected':''}>Sí</option>
+        <option value="false" ${!e1.is_active?'selected':''}>No</option>
+      </select>
+    </label>
+    <small class="muted">El rol del equipo no se cambia aquí (solo datos básicos).</small>
+  `, async (fd)=>{
+    const { data, error: e2 } = await supabase.rpc("rpc_equipo_editar", {
+      p_equipo_id: equipoId,
+      p_codigo: fd.get("codigo"),
+      p_rol_equipo_id: e1.rol_equipo_id,
+      p_descripcion: fd.get("desc") || "",
+      p_is_active: fd.get("activo")==="true"
+    });
+    if(e2) throw new Error(e2.message);
+    onDone?.(data);
+  });
+}
+
+async function modalEnsamblar(equipoId, onDone){
+  // Listar componentes “libres” o en tu centro (RLS limitará)
+  const { data: comps, error } = await supabase
+    .from("componentes")
+    .select("id,serie,is_active,centro_id,tipo:tipo_componente_id(nombre),estado:estado_componente_id(nombre)")
+    .order("serie").limit(200);
+  if(error) throw new Error(error.message);
+
+  openFormModal(`
+    <h4 style="margin:0 0 8px">Ensamblar componente</h4>
+    <label>Componente
+      <select name="comp" required>
+        <option value="">—</option>
+        ${(comps||[]).map(c=>`
+          <option value="${c.id}">
+            ${c.serie} · ${c.tipo?.nombre ?? 'Tipo?'} · estado:${c.estado?.nombre ?? '—'} ${c.is_active?'':'· inactivo'}
+          </option>`).join("")}
+      </select>
+    </label>
+    <label>Marcar como opcional
+      <select name="opc">
+        <option value="false">No</option>
+        <option value="true">Sí</option>
+      </select>
+    </label>
+  `, async (fd)=>{
+    const { data, error: e2 } = await supabase.rpc("rpc_equipo_agregar_componente", {
+      p_equipo_id: equipoId,
+      p_componente_id: fd.get("comp"),
+      p_es_opcional: fd.get("opc")==="true"
+    });
+    if(e2) throw new Error(e2.message);
+    onDone?.(data);
+  });
+}
+
+async function modalQuitar(equipoId, onDone){
+  const { data: comps, error } = await supabase
+    .from("equipo_componente")
+    .select("componente:componente_id(id,serie,tipo:tipo_componente_id(nombre))")
+    .eq("equipo_id", equipoId).is("fecha_fin", null);
+  if(error) throw new Error(error.message);
+
+  openFormModal(`
+    <h4 style="margin:0 0 8px">Quitar componente ensamblado</h4>
+    <label>Componente ensamblado
+      <select name="comp" required>
+        <option value="">—</option>
+        ${(comps||[]).map(x=>`<option value="${x.componente?.id}">${x.componente?.serie} · ${x.componente?.tipo?.nombre}</option>`).join("")}
+      </select>
+    </label>
+  `, async (fd)=>{
+    const { data, error: e2 } = await supabase.rpc("rpc_equipo_quitar_componente", {
+      p_equipo_id: equipoId,
+      p_componente_id: fd.get("comp"),
+    });
+    if(e2) throw new Error(e2.message);
+    onDone?.(data);
+  });
+}
+
+async function modalFallaDesdeEquipo(equipoId){
+  const { data: comps, error } = await supabase
+    .from("equipo_componente")
+    .select("componente:componente_id(id,serie,tipo:tipo_componente_id(nombre))")
+    .eq("equipo_id", equipoId).is("fecha_fin", null);
+  if(error) throw new Error(error.message);
+
+  openFormModal(`
+    <h4 style="margin:0 0 8px">Reportar falla</h4>
+    <label>Componente ensamblado
+      <select name="comp" required>
+        <option value="">—</option>
+        ${(comps||[]).map(x=>`<option value="${x.componente?.id}">${x.componente?.serie} · ${x.componente?.tipo?.nombre}</option>`).join("")}
+      </select>
+    </label>
+    <label>Detalle<textarea name="detalle" rows="3" required></textarea></label>
+  `, async (fd)=>{
+    const { data, error: e2 } = await supabase.rpc("rpc_equipo_reportar_falla", {
+      p_equipo_id: equipoId,
+      p_componente_id: fd.get("comp"),
+      p_detalle: fd.get("detalle")
+    });
+    if(e2) throw new Error(e2.message);
+    alert(`Falla creada: ${data}`);
+  });
+}
+
+// =========== Listeners ===========
+export function initEquiposUI(requestReload){
+  // Botones de toolbar
+  document.querySelector("#eq-crear").onclick = ()=> modalCrearEquipo(()=>requestReload());
+  document.querySelector("#eq-refrescar").onclick = ()=> requestReload();
+
+  // Delegación de clicks en la tabla
+  document.querySelector("#eq-tbody").addEventListener("click", async ev=>{
+    const b = ev.target.closest("button[data-act]"); if(!b) return;
+    const id = b.dataset.id, act = b.dataset.act;
+    try{
+      if(act==="editar")   await modalEditarEquipo(id, ()=>requestReload());
+      if(act==="ensamblar")await modalEnsamblar(id, ()=>requestReload());
+      if(act==="quitar")   await modalQuitar(id, ()=>requestReload());
+      if(act==="falla")    await modalFallaDesdeEquipo(id);
+    }catch(err){
+      alert(err.message || err);
+    }
+  });
 }
 
