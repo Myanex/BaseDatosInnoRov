@@ -2,166 +2,184 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
+  <title>ROV · Inventario</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gestión ROV — V3</title>
   <style>
     :root{color-scheme:dark light}
-    body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial}
-    header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#0b1220;color:#e5e7eb;border-bottom:1px solid #1f2937}
-    header .session{font-size:.9rem;color:#9ca3af}
-    header .session strong{color:#e5e7eb}
-    main{padding:12px}
-    .hidden{display:none}
-    .tabs{display:flex;gap:8px;margin-bottom:12px}
-    .tabs button{padding:8px 10px;border-radius:8px;border:1px solid #374151;background:#111827;color:#e5e7eb;cursor:pointer}
-    .tabs button.active{background:#2563eb;border-color:#2563eb}
-    .card{background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:12px}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #1f2937;padding:8px;text-align:left;font-size:.95rem}
-    .acciones{display:flex;gap:8px}
-    .btn{border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
-    .btn-primary{background:#2563eb;color:#fff}
-    .btn-secondary{background:#374151;color:#fff}
-    .muted{color:#9ca3af;font-size:.9rem}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      font-size:14px; line-height:1.35;
+      margin:0; background:#0b0f14; color:#e6ebf0;
+    }
+    header{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:10px 16px; background:#111827; border-bottom:1px solid #223
+    }
+    #header-right{display:flex; gap:10px; align-items:center}
+    main{max-width:1100px; margin:0 auto; padding:16px}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .pill{padding:2px 8px; border:1px solid #334; border-radius:999px; font-size:12px; background:#0f1620}
+    .muted{opacity:.75}
 
-    /* Modal mínimo */
-    .modal.hidden{display:none}
-    .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:50}
-    .modal-content{background:#111827;color:#e5e7eb;max-width:520px;width:92%;padding:16px;border-radius:12px;border:1px solid #1f2937}
-    .modal-content h3{margin:0 0 6px}
-    .modal-content label{display:block;margin:12px 0 4px;font-size:.9rem;color:#9ca3af}
-    .modal-content select,.modal-content textarea{width:100%;background:#0b1220;color:#e5e7eb;border:1px solid #374151;border-radius:8px;padding:8px}
-    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-    .danger{color:#ef4444}
-    .ok{color:#10b981}
+    /* Panels */
+    .panel{display:none}
+    .panel.active{display:block}
+
+    /* Auth form compacto */
+    #view-auth form{
+      width:360px; max-width:92vw; margin:40px auto; padding:14px;
+      background:#0d141d; border:1px solid #223; border-radius:10px
+    }
+    label{display:block; margin-bottom:8px}
+    input,select,button,textarea{
+      width:100%; font-size:14px;
+      background:#0f1620; color:#e6ebf0;
+      border:1px solid #334; border-radius:8px;
+      padding:6px 10px; height:36px
+    }
+    textarea{height:auto; min-height:80px}
+    button{cursor:pointer}
+    button.small{height:32px; padding:4px 10px}
+    button[disabled]{opacity:.55; cursor:not-allowed}
+
+    /* Tabs compactas */
+    nav.tabs{display:flex; gap:6px; margin:6px 0 12px}
+    nav.tabs button{
+      background:#0f1620; border:1px solid #223; border-bottom:none;
+      border-radius:8px 8px 0 0; padding:6px 10px; height:34px; font-size:13px
+    }
+    nav.tabs button.active{background:#151f2c}
+
+    /* Tablas compactas */
+    table{width:100%; border-collapse:separate; border-spacing:0 6px}
+    th,td{text-align:left; padding:8px 10px; vertical-align:top; font-size:13px}
+    tbody tr{background:#0d141d; border:1px solid #223}
+    .actions{display:flex; gap:6px; flex-wrap:wrap}
+    .tag{display:inline-block; background:#192333; border:1px solid #294; padding:2px 6px; border-radius:6px; font-size:12px; margin-right:6px}
+
+    /* Toolbars */
+    .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0}
+    .toolbar select, .toolbar button{width:auto}
+
+    /* Modales compactos */
+    dialog{
+      background:#0d141d; color:#e6ebf0; border:1px solid #334; border-radius:8px;
+      padding:14px; width:420px; max-width:92vw
+    }
+    dialog form > *{margin-bottom:8px}
   </style>
 
-  <!-- Config y cliente Supabase (deben existir en tu proyecto) -->
+  <!-- Config y cliente Supabase (deben existir) -->
   <script src="./env.js"></script>
   <script src="./js/supabaseClient.js"></script>
-  <script src="./js/auth.js"></script>
-  <script src="./js/main.js" defer></script>
-  <!-- Páginas/feature -->
+  <!-- Nuestra página -->
   <script src="./js/equipos.js" defer></script>
+  <!-- (Opcional) si ya tienes estos archivos activos, déjalos; si no, omítelos -->
+  <script src="./js/auth.js" defer></script>
+  <script src="./js/main.js" defer></script>
   <script src="./js/componentes.js" defer></script>
 </head>
 <body>
-
-  <!-- Header (se muestra solo logeado) -->
-  <header id="appHeader" class="hidden">
-    <div>
-      <div><strong>Gestión ROV — V3</strong></div>
-      <div class="session">
-        <span id="hdrEmail">—</span> · Rol: <span id="hdrRol">—</span> · Centro: <span id="hdrCentro">—</span>
-      </div>
-    </div>
-    <div>
-      <button id="btnLogout" class="btn btn-secondary">Salir</button>
-    </div>
-  </header>
-
-  <main>
-    <!-- Vista Login -->
-    <section id="view-login" class="card">
-      <h2>Ingresar</h2>
-      <p class="muted">Email y contraseña de tu cuenta Supabase Auth.</p>
-      <div style="display:grid;gap:8px;max-width:360px">
-        <label>Email
-          <input id="loginEmail" type="email" placeholder="tu@correo.com"
-                 style="width:100%;padding:8px;border-radius:8px;border:1px solid #374151;background:#0b1220;color:#e5e7eb" />
-        </label>
-        <label>Contraseña
-          <input id="loginPassword" type="password" placeholder="••••••••"
-                 style="width:100%;padding:8px;border-radius:8px;border:1px solid #374151;background:#0b1220;color:#e5e7eb" />
-        </label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button id="btnLogin" class="btn btn-primary">Entrar</button>
-          <span id="loginMsg" class="muted"></span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Vista App -->
-    <section id="view-app" class="hidden">
-      <div class="tabs">
-        <button id="tabEquipos" class="active">Equipos</button>
-        <button id="tabComponentes">Componentes</button>
-      </div>
-
-      <!-- Página: Equipos -->
-      <section id="page-equipos" class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h2 style="margin:0">Equipos</h2>
-          <div class="muted" id="equiposInfo">—</div>
-        </div>
-        <div class="muted" style="margin-bottom:8px">
-          Verás solo los equipos asignados a tu centro (RLS) o todos si eres super-rol.
-        </div>
-        <div style="overflow:auto">
-          <table id="tblEquipos">
-            <thead>
-              <tr>
-                <th style="width:160px">Código</th>
-                <th>Descripción</th>
-                <th style="width:160px">Componentes (ensamblados)</th>
-                <th style="width:220px">Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tblEquiposBody">
-              <!-- filas dinámicas -->
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Página: Componentes (placeholder para mantener compatibilidad) -->
-      <section id="page-componentes" class="card hidden">
-        <h2 style="margin-top:0">Componentes</h2>
-        <p class="muted">Vista en construcción (usa la pestaña Equipos para “Reportar falla”).</p>
-      </section>
-    </section>
-  </main>
-
-  <!-- Modal: Reportar falla (Equipo → Componente ensamblado) -->
-  <div id="modalFallaEquipo" class="modal hidden" aria-hidden="true">
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalFallaEquipoTitle">
-      <h3 id="modalFallaEquipoTitle">Reportar falla</h3>
-      <p class="muted" id="fallaEquipoTitulo">Equipo: —</p>
-
-      <label for="fallaEquipoComponente">Componente ensamblado</label>
-      <select id="fallaEquipoComponente"></select>
-
-      <label for="fallaEquipoDetalle">Detalle</label>
-      <textarea id="fallaEquipoDetalle" rows="4" placeholder="Describe la falla..."></textarea>
-
-      <div class="modal-actions">
-        <button id="btnFallaEquipoCancelar" class="btn btn-secondary">Cancelar</button>
-        <button id="btnFallaEquipoEnviar" class="btn btn-primary">Reportar</button>
-      </div>
-    </div>
+<header>
+  <div><strong>ROV · Inventario</strong></div>
+  <div id="session-badges" class="row muted"></div>
+  <div id="header-right">
+    <button id="btn-logout" class="small" style="display:none">Salir</button>
   </div>
+</header>
 
-  <script>
-    // Navegación simple de tabs (sin depender de main.js)
-    document.addEventListener('DOMContentLoaded', () => {
-      const $tabEq = document.getElementById('tabEquipos');
-      const $tabCo = document.getElementById('tabComponentes');
-      const $pgEq  = document.getElementById('page-equipos');
-      const $pgCo  = document.getElementById('page-componentes');
+<main>
+  <!-- LOGIN -->
+  <section id="view-auth" class="panel active">
+    <form onsubmit="return false">
+      <h3>Ingresar</h3>
+      <label>Email
+        <input id="auth-email" type="email" placeholder="tu@correo.com" />
+      </label>
+      <label>Contraseña
+        <input id="auth-pass" type="password" placeholder="••••••••" />
+      </label>
+      <div class="row">
+        <button id="btn-login">Entrar</button>
+        <span id="auth-msg" class="muted"></span>
+      </div>
+    </form>
+  </section>
 
-      function activate(tab){
-        if(tab==='equipos'){
-          $tabEq.classList.add('active'); $tabCo.classList.remove('active');
-          $pgEq.classList.remove('hidden'); $pgCo.classList.add('hidden');
-        }else{
-          $tabCo.classList.add('active'); $tabEq.classList.remove('active');
-          $pgCo.classList.remove('hidden'); $pgEq.classList.add('hidden');
-        }
-      }
-      $tabEq?.addEventListener('click', () => activate('equipos'));
-      $tabCo?.addEventListener('click', () => activate('componentes'));
-    });
-  </script>
+  <!-- APP -->
+  <section id="view-app" class="panel">
+    <nav class="tabs">
+      <button data-tab="equipos" class="active">Equipos</button>
+      <button data-tab="componentes">Componentes</button>
+    </nav>
+
+    <section id="alerts"></section>
+
+    <!-- Página: Equipos -->
+    <section id="panel-equipos" class="panel active">
+      <div class="toolbar">
+        <span class="muted">Verás equipos por RLS (centro) o todos si eres super-rol.</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px">Código</th>
+            <th>Descripción</th>
+            <th style="width:260px">Componentes (ensamblados)</th>
+            <th style="width:200px">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-equipos-body"></tbody>
+      </table>
+      <div id="equipos-info" class="muted" style="margin-top:6px">—</div>
+    </section>
+
+    <!-- Página: Componentes (placeholder) -->
+    <section id="panel-componentes" class="panel">
+      <p class="muted">Usa la pestaña Equipos para “Reportar falla”.</p>
+    </section>
+  </section>
+</main>
+
+<!-- Modal: Reportar falla (dialog) -->
+<dialog id="dlg-falla-equipo">
+  <form method="dialog">
+    <h3 style="margin:0 0 8px">Reportar falla</h3>
+    <div id="dlg-falla-equipo-titulo" class="muted" style="margin-bottom:6px">Equipo: —</div>
+
+    <label>Componente ensamblado
+      <select id="falla-comp"></select>
+    </label>
+
+    <label>Detalle
+      <textarea id="falla-det" placeholder="Describe la falla..."></textarea>
+    </label>
+
+    <div class="row" style="justify-content:flex-end; margin-top:8px">
+      <button id="btn-falla-cancel" class="small" value="cancel">Cancelar</button>
+      <button id="btn-falla-send" class="small" value="default">Reportar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  // Tabs simples (sin depender de otros scripts)
+  document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('nav.tabs button');
+    const pEq  = document.getElementById('panel-equipos');
+    const pCo  = document.getElementById('panel-componentes');
+    tabs.forEach(btn => btn.addEventListener('click', () => {
+      tabs.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.getAttribute('data-tab');
+      pEq.classList.toggle('active', tab === 'equipos');
+      pCo.classList.toggle('active', tab === 'componentes');
+    }));
+  });
+</script>
 </body>
 </html>
 
