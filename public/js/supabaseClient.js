@@ -1,14 +1,14 @@
-// public/js/supabaseClient.js
-if (!window.ENV?.SUPABASE_URL || !window.ENV?.SUPABASE_ANON_KEY) {
-  console.error("[ENV] Faltan SUPABASE_URL o SUPABASE_ANON_KEY en env.js");
-}
+import { ENV } from "../env.js";
 
 export const supabase = window.supabase.createClient(
-  window.ENV.SUPABASE_URL,
-  window.ENV.SUPABASE_ANON_KEY,
-  { auth: { persistSession: true, autoRefreshToken: true } }
+  ENV.SUPABASE_URL,
+  ENV.SUPABASE_ANON_KEY
 );
 
-// 👇 Exponer el cliente para depuración en consola
-window.sb = supabase;
+export async function whoami() {
+  const { data, error } = await supabase.rpc("rpc_whoami");
+  if (error) return null;
+  return Array.isArray(data) && data.length ? data[0] : data;
+}
+
 
