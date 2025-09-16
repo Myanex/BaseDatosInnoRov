@@ -4,77 +4,74 @@
   <meta charset="utf-8" />
   <title>ROV · Inventario</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-  :root{color-scheme:dark light}
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
-    font-size:14px; line-height:1.35;
-    margin:0; background:#0b0f14; color:#e6ebf0;
-  }
-  header{
-    display:flex; justify-content:space-between; align-items:center;
-    padding:10px 16px; background:#111827; border-bottom:1px solid #223
-  }
-  main{max-width:1100px; margin:0 auto; padding:16px}
-  .pill{padding:2px 8px; border:1px solid #334; border-radius:999px; font-size:12px; background:#0f1620}
-  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-  .muted{opacity:.75}
+  <style>
+    :root{color-scheme:dark light}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      font-size:14px; line-height:1.35;
+      margin:0; background:#0b0f14; color:#e6ebf0;
+    }
+    header{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:10px 16px; background:#111827; border-bottom:1px solid #223
+    }
+    #header-right{display:flex; gap:10px; align-items:center}
+    main{max-width:1100px; margin:0 auto; padding:16px}
+    .pill{padding:2px 8px; border:1px solid #334; border-radius:999px; font-size:12px; background:#0f1620}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .muted{opacity:.75}
 
-  /* Panels */
-  .panel{display:none}
-  .panel.active{display:block}
+    .panel{display:none}
+    .panel.active{display:block}
 
-  /* Auth form compacto */
-  #view-auth form{
-    width:360px; max-width:92vw; margin:40px auto; padding:14px;
-    background:#0d141d; border:1px solid #223; border-radius:10px
-  }
-  label{display:block; margin-bottom:8px}
-  input,select,button,textarea{
-    width:100%; font-size:14px;
-    background:#0f1620; color:#e6ebf0;
-    border:1px solid #334; border-radius:8px;
-    padding:6px 10px; height:36px
-  }
-  textarea{height:auto; min-height:80px}
-  button{cursor:pointer}
-  button.small{height:32px; padding:4px 10px}
-  button[disabled]{opacity:.55; cursor:not-allowed}
+    #view-auth form{
+      width:360px; max-width:92vw; margin:40px auto; padding:14px;
+      background:#0d141d; border:1px solid #223; border-radius:10px
+    }
+    label{display:block; margin-bottom:8px}
+    input,select,button,textarea{
+      width:100%; font-size:14px;
+      background:#0f1620; color:#e6ebf0;
+      border:1px solid #334; border-radius:8px;
+      padding:6px 10px; height:36px
+    }
+    textarea{height:auto; min-height:80px}
+    button{cursor:pointer}
+    button.small{height:32px; padding:4px 10px}
+    button[disabled]{opacity:.55; cursor:not-allowed}
 
-  /* Tabs compactas */
-  nav.tabs{display:flex; gap:6px; margin:6px 0 12px}
-  nav.tabs button{
-    background:#0f1620; border:1px solid #223; border-bottom:none;
-    border-radius:8px 8px 0 0; padding:6px 10px; height:34px; font-size:13px
-  }
-  nav.tabs button.active{background:#151f2c}
+    nav.tabs{display:flex; gap:6px; margin:6px 0 12px}
+    nav.tabs button{
+      background:#0f1620; border:1px solid #223; border-bottom:none;
+      border-radius:8px 8px 0 0; padding:6px 10px; height:34px; font-size:13px
+    }
+    nav.tabs button.active{background:#151f2c}
 
-  /* Tablas compactas */
-  table{width:100%; border-collapse:separate; border-spacing:0 6px}
-  th,td{text-align:left; padding:8px 10px; vertical-align:top; font-size:13px}
-  tbody tr{background:#0d141d; border:1px solid #223}
-  .actions{display:flex; gap:6px; flex-wrap:wrap}
-  .tag{display:inline-block; background:#192333; border:1px solid #294; padding:2px 6px; border-radius:6px; font-size:12px; margin-right:6px}
+    table{width:100%; border-collapse:separate; border-spacing:0 6px}
+    th,td{text-align:left; padding:8px 10px; vertical-align:top; font-size:13px}
+    tbody tr{background:#0d141d; border:1px solid #223}
+    .actions{display:flex; gap:6px; flex-wrap:wrap}
+    .tag{display:inline-block; background:#192333; border:1px solid #294; padding:2px 6px; border-radius:6px; font-size:12px; margin-right:6px}
 
-  /* Toolbars */
-  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0}
-  .toolbar select, .toolbar button{width:auto}
+    .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0}
+    .toolbar select, .toolbar button{width:auto}
 
-  /* Modales compactos */
-  dialog{
-    background:#0d141d; color:#e6ebf0; border:1px solid #334; border-radius:8px;
-    padding:14px; width:420px; max-width:92vw
-  }
-  dialog form > *{margin-bottom:8px}
-</style>
-
+    dialog{
+      background:#0d141d; color:#e6ebf0; border:1px solid #334; border-radius:8px;
+      padding:14px; width:420px; max-width:92vw
+    }
+    dialog form > *{margin-bottom:8px}
+  </style>
 </head>
 <body>
 <header>
   <div><strong>ROV · Inventario</strong></div>
-  <div id="session-info" class="row"></div>
+  <div id="header-right">
+    <div id="session-info" class="row muted"></div>
+    <button id="btn-logout" class="small" style="display:none">Salir</button>
+  </div>
 </header>
 
 <main>
@@ -90,13 +87,10 @@
 
   <!-- APP -->
   <section id="view-app" class="panel">
-    <div class="row" style="justify-content:space-between">
-      <nav class="tabs">
-        <button data-tab="equipos" class="active">Equipos</button>
-        <button data-tab="componentes">Componentes</button>
-      </nav>
-      <button id="btn-logout">Salir</button>
-    </div>
+    <nav class="tabs">
+      <button data-tab="equipos" class="active">Equipos</button>
+      <button data-tab="componentes">Componentes</button>
+    </nav>
 
     <section id="alerts"></section>
 
