@@ -1,4 +1,3 @@
-# path: public/js/equipos.js
 import { supabase } from "./supabaseClient.js";
 
 /* ========== Utilidad de modales ========== */
