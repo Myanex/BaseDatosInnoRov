@@ -1,72 +1,121 @@
-// public/js/equipos.js
-// V3 — Día 3 · Parte 2 — Vista de Equipos + Modal “Reportar falla”
-// Requiere: supabaseClient.js (client), auth.js (login/logout/estado)
+// V3 – Día 3 · Parte 2
+// Página "Equipos" + login básico + modal (dialog) para rpc_equipo_reportar_falla
 
-(() => {
-  // ------- Referencias DOM (existirán por index.html) -------
-  const $viewLogin   = document.getElementById('view-login');
-  const $viewApp     = document.getElementById('view-app');
-  const $appHeader   = document.getElementById('appHeader');
+// --- Supabase client debe existir globalmente (creado en supabaseClient.js) ---
+/* global supabase */
 
-  const $hdrEmail    = document.getElementById('hdrEmail');
-  const $hdrRol      = document.getElementById('hdrRol');
-  const $hdrCentro   = document.getElementById('hdrCentro');
+(function () {
+  // --------- DOM ---------
+  const $viewAuth   = document.getElementById('view-auth');
+  const $viewApp    = document.getElementById('view-app');
+  const $badges     = document.getElementById('session-badges');
+  const $btnLogout  = document.getElementById('btn-logout');
 
-  const $btnLogin    = document.getElementById('btnLogin');
-  const $btnLogout   = document.getElementById('btnLogout');
-  const $loginEmail  = document.getElementById('loginEmail');
-  const $loginPass   = document.getElementById('loginPassword');
-  const $loginMsg    = document.getElementById('loginMsg');
+  const $email      = document.getElementById('auth-email');
+  const $pass       = document.getElementById('auth-pass');
+  const $btnLogin   = document.getElementById('btn-login');
+  const $authMsg    = document.getElementById('auth-msg');
 
-  // Equipos
-  const $infoEq      = document.getElementById('equiposInfo');
-  const $tblBody     = document.getElementById('tblEquiposBody');
+  const $tblBody    = document.getElementById('tbl-equipos-body');
+  const $info       = document.getElementById('equipos-info');
 
-  // Modal Reportar Falla
-  const $modal       = document.getElementById('modalFallaEquipo');
-  const $selComp     = document.getElementById('fallaEquipoComponente');
-  const $txtDet      = document.getElementById('fallaEquipoDetalle');
-  const $ttlModal    = document.getElementById('fallaEquipoTitulo');
-  const $btnFallaOK  = document.getElementById('btnFallaEquipoEnviar');
-  const $btnFallaNo  = document.getElementById('btnFallaEquipoCancelar');
+  // Dialog (modal)
+  const $dlg        = document.getElementById('dlg-falla-equipo');
+  const $dlgTitle   = document.getElementById('dlg-falla-equipo-titulo');
+  const $selComp    = document.getElementById('falla-comp');
+  const $txtDet     = document.getElementById('falla-det');
+  const $btnFallaOK = document.getElementById('btn-falla-send');
+  const $btnFallaNo = document.getElementById('btn-falla-cancel');
 
-  // ------- Estado simple -------
-  let sessionProfile = null; // { email, role, centro_nombre, centro_id, ... }
-  let equiposCache   = [];   // [{id,codigo,descripcion,ensamblados:[{id,serie}]}]
-  let equipoCtx      = null; // {id,codigo}
+  // --------- Estado ---------
+  let sessionProfile = null; // { email, role, centro_id, centro_nombre }
+  let equiposCache   = [];
+  let equipoCtx      = null; // { id, codigo }
 
-  // ------- Helpers UI -------
-  function showLogin() {
-    $viewLogin?.classList.remove('hidden');
-    $viewApp?.classList.add('hidden');
-    $appHeader?.classList.add('hidden');
+  // --------- Util ---------
+  function showAuth() {
+    $viewAuth.classList.add('active');
+    $viewApp.classList.remove('active');
+    $btnLogout.style.display = 'none';
+    $badges.innerHTML = '';
   }
   function showApp() {
-    $viewLogin?.classList.add('hidden');
-    $viewApp?.classList.remove('hidden');
-    $appHeader?.classList.remove('hidden');
+    $viewAuth.classList.remove('active');
+    $viewApp.classList.add('active');
+    $btnLogout.style.display = '';
+  }
+  function setBadges(p) {
+    const email  = p?.email ?? '—';
+    const role   = p?.role ?? '—';
+    const centro = p?.centro_nombre ?? '—';
+    $badges.innerHTML = `
+      <span class="pill">${email}</span>
+      <span class="pill">Rol: ${role}</span>
+      <span class="pill">Centro: ${centro}</span>
+    `;
   }
 
-  function setHeader(profile) {
-    $hdrEmail.textContent  = profile?.email ?? '—';
-    $hdrRol.textContent    = profile?.role ?? '—';
-    $hdrCentro.textContent = profile?.centro_nombre ?? '—';
+  async function whoamiFallback() {
+    // 1) Si existe RPC whoami()
+    try {
+      const { data, error } = await supabase.rpc('rpc_whoami');
+      if (!error && data) return data;
+    } catch {}
+    // 2) claims básicas desde auth
+    const { data: { user } } = await supabase.auth.getUser();
+    return { email: user?.email ?? null, role: null, centro_id: null, centro_nombre: null };
   }
 
+  // --------- Auth ---------
+  async function doLogin() {
+    $authMsg.textContent = 'Autenticando...';
+    const email = $email.value?.trim();
+    const pass  = $pass.value;
+    if (!email || !pass) {
+      $authMsg.textContent = 'Completa email y contraseña';
+      return;
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      $authMsg.textContent = 'Error: ' + error.message;
+      return;
+    }
+    $authMsg.textContent = '';
+    await onAuthChanged();
+  }
+
+  async function doLogout() {
+    await supabase.auth.signOut();
+    sessionProfile = null;
+    equiposCache = [];
+    showAuth();
+  }
+
+  async function onAuthChanged() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showAuth();
+      return;
+    }
+    sessionProfile = await whoamiFallback();
+    setBadges(sessionProfile);
+    showApp();
+    await listarEquipos();
+  }
+
+  // --------- Datos ---------
   function rowHTML(e) {
-    const compsCount = e.ensamblados?.length ?? 0;
-    const compsText  = compsCount
+    const comps = e.ensamblados?.length
       ? e.ensamblados.map(c => (c.serie ?? 'sin_serie')).join(', ')
       : '—';
-
     return `
       <tr>
         <td><strong>${e.codigo}</strong></td>
         <td>${e.descripcion ?? ''}</td>
-        <td>${compsText}</td>
+        <td>${comps}</td>
         <td>
-          <div class="acciones">
-            <button class="btn btn-secondary" data-acc="falla" data-id="${e.id}">Reportar falla</button>
+          <div class="actions">
+            <button class="small" data-acc="falla" data-id="${e.id}">Reportar falla</button>
           </div>
         </td>
       </tr>
@@ -75,56 +124,30 @@
 
   function paintEquipos(list) {
     $tblBody.innerHTML = list.map(rowHTML).join('');
-    // Delegación de eventos
     $tblBody.querySelectorAll('button[data-acc="falla"]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         const eq = equiposCache.find(x => x.id === id);
-        if (eq) openModalFalla(eq);
+        if (eq) openFalla(eq);
       });
     });
   }
 
-  // ------- Carga de datos -------
-  async function loadProfile() {
-    // Intento 1: si tu supabaseClient.js expone whoami() / fetchProfileAndCentro()
-    try {
-      if (typeof whoami === 'function') {
-        const info = await whoami();
-        if (info?.email) return info;
-      }
-    } catch (e) {
-      console.warn('whoami() no disponible o falló', e);
-    }
-    // Intento 2: leer claims mínimas desde RLS con rpc_whoami si existe
-    try {
-      const { data, error } = await supabase.rpc('rpc_whoami');
-      if (error) throw error;
-      return data || {};
-    } catch (e) {
-      console.warn('rpc_whoami no disponible, se usará sesión auth básica');
-      // Intento 3: usar usuario de auth
-      const { data: { user } } = await supabase.auth.getUser();
-      return { email: user?.email ?? null, role: null, centro_nombre: null, centro_id: null };
-    }
-  }
-
   async function loadEquipos() {
-    // 1) Equipos visibles vía RLS
+    // Equipos visibles por RLS
     const { data: eqs, error: errEq } = await supabase
       .from('equipos')
       .select('id,codigo,descripcion')
       .order('codigo', { ascending: true });
 
     if (errEq) {
-      $infoEq.textContent = `Error cargando equipos: ${errEq.message}`;
+      $info.textContent = `Error cargando equipos: ${errEq.message}`;
       return [];
     }
-
     const ids = (eqs ?? []).map(x => x.id);
     if (ids.length === 0) return [];
 
-    // 2) Vínculos vigentes de todos esos equipos
+    // Vínculos vigentes
     const { data: vincs, error: errV } = await supabase
       .from('equipo_componente')
       .select('equipo_id, componente_id, fecha_fin')
@@ -132,8 +155,8 @@
       .is('fecha_fin', null);
 
     if (errV) {
-      $infoEq.textContent = `Error vínculos: ${errV.message}`;
-      return (eqs ?? []).map(e => ({...e, ensamblados: []}));
+      $info.textContent = `Error vínculos: ${errV.message}`;
+      return (eqs ?? []).map(e => ({ ...e, ensamblados: [] }));
     }
 
     const compIds = [...new Set(vincs.map(v => v.componente_id))];
@@ -143,18 +166,12 @@
         .from('componentes')
         .select('id, serie')
         .in('id', compIds);
-
-      if (errC) {
-        $infoEq.textContent = `Error componentes: ${errC.message}`;
-      } else {
-        comps = cdata ?? [];
-      }
+      if (!errC && cdata) comps = cdata;
     }
 
-    // 3) Armar estructura
     const byEq = new Map();
-    eqs.forEach(e => byEq.set(e.id, { ...e, ensamblados: [] }));
-    vincs.forEach(v => {
+    (eqs ?? []).forEach(e => byEq.set(e.id, { ...e, ensamblados: [] }));
+    (vincs ?? []).forEach(v => {
       const rec = byEq.get(v.equipo_id);
       if (!rec) return;
       const c = comps.find(x => x.id === v.componente_id);
@@ -164,38 +181,34 @@
     return Array.from(byEq.values());
   }
 
-  // ------- Modal Reporte de Falla -------
-  async function openModalFalla(eq) {
+  async function listarEquipos() {
+    $info.textContent = 'Cargando...';
+    equiposCache = await loadEquipos();
+    paintEquipos(equiposCache);
+    $info.textContent = `Total: ${equiposCache.length} equipos`;
+  }
+
+  // --------- Modal Falla ---------
+  async function openFalla(eq) {
     equipoCtx = { id: eq.id, codigo: eq.codigo };
-    $ttlModal.textContent = `Equipo: ${eq.codigo}`;
+    $dlgTitle.textContent = `Equipo: ${eq.codigo}`;
     $txtDet.value = '';
 
-    // Cargar ensamblados vigentes del equipo
     const { data: vincs, error: errV } = await supabase
       .from('equipo_componente')
       .select('componente_id, fecha_fin')
       .eq('equipo_id', eq.id)
       .is('fecha_fin', null);
 
-    if (errV) {
-      alert('Error cargando componentes ensamblados: ' + errV.message);
-      return;
-    }
-    if (!vincs || vincs.length === 0) {
-      alert('Este equipo no tiene componentes ensamblados vigentes.');
-      return;
-    }
+    if (errV) { alert('Error cargando componentes: ' + errV.message); return; }
+    if (!vincs || vincs.length === 0) { alert('Sin componentes ensamblados.'); return; }
 
     const compIds = vincs.map(v => v.componente_id);
     const { data: comps, error: errC } = await supabase
       .from('componentes')
       .select('id, serie')
       .in('id', compIds);
-
-    if (errC) {
-      alert('Error cargando componentes: ' + errC.message);
-      return;
-    }
+    if (errC) { alert('Error cargando componentes: ' + errC.message); return; }
 
     $selComp.innerHTML = '';
     (comps ?? []).forEach(c => {
@@ -205,18 +218,14 @@
       $selComp.appendChild(opt);
     });
 
-    $modal.classList.remove('hidden');
-    $modal.setAttribute('aria-hidden', 'false');
+    try { $dlg.showModal(); } catch { $dlg.setAttribute('open',''); }
   }
 
-  function closeModal() {
-    $modal.classList.add('hidden');
-    $modal.setAttribute('aria-hidden', 'true');
-    equipoCtx = null;
-  }
-
-  async function submitFalla() {
+  async function submitFalla(ev) {
+    // Evitar que <form method="dialog"> cierre antes de llamar RPC
+    if (ev) ev.preventDefault();
     if (!equipoCtx) return;
+
     const componenteId = $selComp.value;
     const detalle      = $txtDet.value?.trim() || '';
 
@@ -226,81 +235,33 @@
       p_detalle: detalle
     });
 
-    if (error) {
-      alert('No se pudo reportar la falla: ' + (error.message || JSON.stringify(error)));
-      return;
-    }
+    if (error) { alert('No se pudo reportar la falla: ' + (error.message || JSON.stringify(error))); return; }
 
-    closeModal();
+    // Cerrar y refrescar
+    try { $dlg.close(); } catch { $dlg.removeAttribute('open'); }
+    equipoCtx = null;
     alert('Falla registrada con id: ' + data);
-    // Refrescar lista (opcional)
     await listarEquipos();
   }
 
-  // ------- Login / Logout básicos (compatibles con auth.js) -------
-  async function doLogin() {
-    $loginMsg.textContent = 'Autenticando...';
-    const email = $loginEmail.value?.trim();
-    const pass  = $loginPass.value;
-    if (!email || !pass) {
-      $loginMsg.textContent = 'Completa email y contraseña';
-      return;
-    }
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) {
-      $loginMsg.textContent = 'Error: ' + error.message;
-      return;
-    }
-    $loginMsg.textContent = '';
-    await onAuthChanged();
+  function cancelFalla() {
+    try { $dlg.close(); } catch { $dlg.removeAttribute('open'); }
+    equipoCtx = null;
   }
 
-  async function doLogout() {
-    await supabase.auth.signOut();
-    sessionProfile = null;
-    equiposCache = [];
-    showLogin();
-  }
-
-  async function onAuthChanged() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      showLogin();
-      return;
-    }
-    // Cargar perfil y datos
-    sessionProfile = await loadProfile();
-    setHeader(sessionProfile);
-    showApp();
-    await listarEquipos();
-  }
-
-  // ------- Carga inicial / wires -------
-  async function listarEquipos() {
-    $infoEq.textContent = 'Cargando...';
-    equiposCache = await loadEquipos();
-    paintEquipos(equiposCache);
-    $infoEq.textContent = `Total: ${equiposCache.length} equipos`;
-  }
-
+  // --------- Wires iniciales ---------
   document.addEventListener('DOMContentLoaded', async () => {
-    // Wires de auth
     $btnLogin?.addEventListener('click', doLogin);
+    $authMsg.textContent = '';
+    $pass?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
     $btnLogout?.addEventListener('click', doLogout);
-    $loginPass?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') doLogin();
-    });
 
-    // Wires modal
     $btnFallaOK?.addEventListener('click', submitFalla);
-    $btnFallaNo?.addEventListener('click', closeModal);
-    $modal?.addEventListener('click', (e) => {
-      if (e.target === $modal) closeModal();
-    });
+    $btnFallaNo?.addEventListener('click', (e) => { e.preventDefault(); cancelFalla(); });
 
-    // Estado auth
     supabase.auth.onAuthStateChange((_event, _session) => { onAuthChanged().catch(console.error); });
     await onAuthChanged();
   });
 })();
+
 
