@@ -379,5 +379,205 @@ export function initEquiposUI(requestReload) {
   });
 }
 
+// === [BEGIN ADD: Modal “Reportar falla” — V3 Día 3 · Parte 2] ==================
+// Nota: este bloque puede pegarse **al final** de `public/js/equipos.js`.
+// - No requiere imports nuevos (usa `supabase` ya importado en este módulo).
+// - Usa delegación de eventos sobre `#eq-tbody` para botones dinámicos.
+// - Busca el `equipo_id` desde `data-equipo-id` del botón o de la fila <tr> contenedora.
+// - Terminología UI: “ensamblar/ensamblado”.
+
+// Utilidades defensivas (solo se definen si no existen)
+const $ = window.$ || ((s, r = document) => r.querySelector(s));
+const $$ = window.$$ || ((s, r = document) => [...r.querySelectorAll(s)]);
+
+if (typeof window.parsePgErrorMessage !== "function") {
+  window.parsePgErrorMessage = function parsePgErrorMessage(msg) {
+    if (!msg) return { code: "error", text: "Error desconocido" };
+    const m = String(msg).match(/^(\d{3}):\s*(.*)$/);
+    return m ? { code: m[1], text: m[2] } : { code: "error", text: String(msg) };
+  };
+}
+
+if (typeof window.flash !== "function") {
+  window.flash = function flash(message = "", ms = 1800) {
+    const el = document.createElement("div");
+    el.textContent = message;
+    el.style.cssText =
+      "position:fixed;right:16px;bottom:16px;background:#1f2937;color:#fff;padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.35;z-index:2147483647;box-shadow:0 4px 16px rgba(0,0,0,.35)";
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  };
+}
+
+if (typeof window.openFormModal !== "function") {
+  // Modal genérico con <dialog>
+  window.openFormModal = function openFormModal(html, onSubmit, withSubmit = true) {
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText =
+      "border:none;border-radius:12px;padding:0;max-width:520px;width:calc(100% - 32px);background:#0b1220;color:#e5e7eb";
+    dlg.innerHTML = `
+      <form method="dialog" style="margin:0;padding:0;display:flex;flex-direction:column;gap:0">
+        <header style="padding:14px 16px;border-bottom:1px solid #1f2937;font-weight:600">Reportar falla</header>
+        <section style="padding:14px 16px">${html}</section>
+        <footer style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #1f2937">
+          <button type="button" data-cancel style="height:36px;padding:0 12px;background:#111827;color:#e5e7eb;border:1px solid #374151;border-radius:8px">Cancelar</button>
+          ${
+            withSubmit
+              ? `<button type="submit" style="height:36px;padding:0 12px;background:#2563eb;color:white;border:none;border-radius:8px">Guardar</button>`
+              : `<button type="button" data-close style="height:36px;padding:0 12px;background:#2563eb;color:white;border:none;border-radius:8px">Cerrar</button>`
+          }
+        </footer>
+      </form>
+    `;
+    document.body.appendChild(dlg);
+    const form = dlg.querySelector("form");
+
+    // Cancelar nunca valida
+    form.querySelector("[data-cancel]")?.addEventListener("click", () => dlg.close());
+    form.querySelector("[data-close]")?.addEventListener("click", () => dlg.close());
+
+    if (withSubmit && typeof onSubmit === "function") {
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(form);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando…";
+        try {
+          await onSubmit(fd, { dialog: dlg, form, submitBtn });
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Guardar";
+        }
+      });
+    }
+    dlg.addEventListener("close", () => dlg.remove());
+    dlg.showModal();
+    return dlg;
+  };
+}
+
+// —— Render del modal “Reportar falla” y llamada a RPC ————————————————
+async function openReportarFallaModal(equipoId) {
+  if (!equipoId) {
+    alert("No se pudo identificar el equipo.");
+    return;
+  }
+
+  // 1) Traer componentes **ensamblados** (vigencia abierta) del equipo
+  const { data: ensamblados, error: qErr } = await supabase
+    .from("equipo_componente")
+    .select(
+      `
+      id,
+      componente:componente_id (
+        id,
+        serie,
+        tipo:tipo_componente_id ( nombre )
+      )
+    `
+    )
+    .eq("equipo_id", equipoId)
+    .is("fecha_fin", null)
+    .order("id", { ascending: true });
+
+  if (qErr) {
+    const { text } = parsePgErrorMessage(qErr.message);
+    alert("No se pudieron cargar componentes ensamblados:\n" + text);
+    return;
+  }
+  if (!ensamblados || ensamblados.length === 0) {
+    alert("Este equipo no tiene componentes ensamblados.");
+    return;
+  }
+
+  // 2) Construir el formulario (selector + detalle)
+  const opts = ensamblados
+    .map((row) => {
+      const comp = row.componente;
+      const tipo = comp?.tipo?.nombre || "Componente";
+      const label = `${tipo} — ${comp?.serie || comp?.id}`;
+      return `<option value="${comp.id}">${label}</option>`;
+    })
+    .join("");
+
+  const html = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-size:12px;color:#9ca3af">Componente ensamblado</span>
+        <select name="componente_id" required style="height:36px;background:#0b1220;border:1px solid #334155;border-radius:8px;color:#e5e7eb;padding:0 10px">
+          ${opts}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-size:12px;color:#9ca3af">Detalle de la falla</span>
+        <textarea name="detalle" rows="4" required
+          placeholder="Describe brevemente el síntoma o evento (fecha, operador, condiciones)…"
+          style="resize:vertical;min-height:96px;background:#0b1220;border:1px solid #334155;border-radius:8px;color:#e5e7eb;padding:8px 10px"></textarea>
+      </label>
+    </div>
+  `;
+
+  openFormModal(html, async (fd, ctx) => {
+    const componenteId = fd.get("componente_id");
+    const detalle = String(fd.get("detalle") || "").trim();
+
+    if (!componenteId || !detalle) {
+      alert("Completa todos los campos.");
+      return;
+    }
+
+    // 3) Llamar RPC: rpc_equipo_reportar_falla(p_equipo_id, p_componente_id, p_detalle)
+    const { data, error } = await supabase.rpc("rpc_equipo_reportar_falla", {
+      p_equipo_id: equipoId,
+      p_componente_id: componenteId,
+      p_detalle: detalle,
+    });
+
+    if (error) {
+      const { code, text } = parsePgErrorMessage(error.message);
+      if (code === "403") alert("Sin permisos para reportar falla en este equipo.");
+      else if (code === "409") alert("No se puede reportar: reglas de negocio no satisfechas.\n" + text);
+      else if (code === "422") alert("Datos inválidos:\n" + text);
+      else alert("Error al reportar la falla:\n" + text);
+      return;
+    }
+
+    // 4) OK → cerrar y refrescar
+    ctx.dialog.close();
+    flash("Falla reportada");
+    // Si tu listado expone una función global para refrescar, intenta llamarla.
+    // Estas líneas son defensivas y no rompen si no existen:
+    (window.refreshEquipos && typeof window.refreshEquipos === "function") && window.refreshEquipos();
+    document.dispatchEvent(new CustomEvent("equipos:falla-reportada", { detail: { equipoId, componenteId: componenteId } }));
+  });
+}
+
+// —— Delegación de eventos para botón “Reportar falla” ————————————————
+// Requiere que el botón tenga alguno de estos atributos/clases:
+//  - data-action="falla"
+//  - .btn-falla
+//  y que provea `data-equipo-id` **o** que la fila <tr> contenedora lo tenga.
+(function installReportarFallaHandler() {
+  const tbody = $("#eq-tbody");
+  if (!tbody) return; // la pestaña podría no estar montada aún
+
+  tbody.addEventListener("click", (ev) => {
+    const btn = ev.target.closest('[data-action="falla"], .btn-falla');
+    if (!btn) return;
+
+    const tr = btn.closest("tr");
+    const equipoId =
+      btn.dataset.equipoId ||
+      tr?.dataset.equipoId ||
+      btn.getAttribute("data-eq") ||
+      null;
+
+    openReportarFallaModal(equipoId);
+  });
+})();
+
+// === [END ADD] ===============================================================
 
 
