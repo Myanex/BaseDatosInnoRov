@@ -124,6 +124,38 @@
   <form method="dialog" id="modal-form-content"></form>
 </dialog>
 
+  <!-- Modal: Reportar falla de componente ensamblado -->
+<div id="modalFallaEquipo" class="modal hidden">
+  <div class="modal-content">
+    <h3>Reportar falla</h3>
+    <p class="text-sm" id="fallaEquipoTitulo">Equipo: —</p>
+
+    <label for="fallaEquipoComponente">Componente ensamblado</label>
+    <select id="fallaEquipoComponente"></select>
+
+    <label for="fallaEquipoDetalle">Detalle</label>
+    <textarea id="fallaEquipoDetalle" rows="4" placeholder="Describe la falla..."></textarea>
+
+    <div class="modal-actions">
+      <button id="btnFallaEquipoCancelar" class="btn-secondary">Cancelar</button>
+      <button id="btnFallaEquipoEnviar" class="btn-primary">Reportar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* estilos mínimos de modal (si ya tienes estilos, omite esto) */
+  .modal.hidden{display:none}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modal-content{background:#111827;color:#e5e7eb;max-width:480px;width:92%;padding:16px;border-radius:12px}
+  .modal-content h3{margin-top:0;margin-bottom:8px}
+  .modal-content label{display:block;margin-top:12px;margin-bottom:4px;font-size:.9rem;color:#9ca3af}
+  .modal-content select,.modal-content textarea{width:100%;background:#0b1220;color:#e5e7eb;border:1px solid #374151;border-radius:8px;padding:8px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  .btn-primary{background:#2563eb;border:none;color:white;padding:8px 12px;border-radius:8px;cursor:pointer}
+  .btn-secondary{background:#374151;border:none;color:white;padding:8px 12px;border-radius:8px;cursor:pointer}
+</style>
+
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script type="module" src="./env.js"></script>
 <script type="module" src="./js/main.js"></script>
