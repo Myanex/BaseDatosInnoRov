@@ -51,7 +51,7 @@ export async function fetchEquipos() {
     .order("codigo");
 
   if (error) {
-    alert(`Error al listar equipos:\n${error.message}`);
+    alert(`Error al listar equipos:\\n${error.message}`);
     return [];
   }
 
@@ -65,7 +65,7 @@ export async function fetchEquipos() {
       .select("equipo_id, centro:centro_id(nombre)")
       .is("fecha_fin", null)
       .in("equipo_id", ids);
-    if (e2) alert(`Error al cargar asignaciones:\n${e2.message}`);
+    if (e2) alert(`Error al cargar asignaciones:\\n${e2.message}`);
     asign = a || [];
   }
 
@@ -78,7 +78,7 @@ export async function fetchEquipos() {
       .select("id, es_opcional, componente:componente_id(serie, tipo:tipo_componente_id(nombre))")
       .eq("equipo_id", e.id)
       .is("fecha_fin", null);
-    if (e3) alert(`Error al cargar componentes del equipo ${e.codigo}:\n${e3.message}`);
+    if (e3) alert(`Error al cargar componentes del equipo ${e.codigo}:\\n${e3.message}`);
 
     e._comps = (comps || []).map(c => {
       const nom = c.componente?.tipo?.nombre ?? "Tipo";
@@ -102,7 +102,7 @@ export function renderEquipos(equipos) {
   }
 
   tbody.innerHTML = equipos.map(e => `
-    <tr>
+    <tr data-equipo-id="${e.id}">
       <td>
         <strong>${e.codigo}</strong><br>
         <small class="muted">${e.is_active ? "Activo" : "Inactivo"}</small>
@@ -157,7 +157,7 @@ async function modalCrearEquipo(onDone) {
         ${(centros || []).map(c => `<option value="${c.id}">${c.nombre}</option>`).join("")}
       </select>
     </label>
- `) } async (fd) => {
+  `, async (fd) => {
     const payload = {
       p_codigo: fd.get("codigo"),
       p_rol_equipo_id: fd.get("rol"),
@@ -167,8 +167,8 @@ async function modalCrearEquipo(onDone) {
     const { data, error } = await supabase.rpc("rpc_equipo_crear", payload);
     if (error) throw new Error(error.message);
     onDone?.(data);
-  };
-
+  });
+}
 
 /**
  * Editar equipo (super-roles): usa rpc_equipo_editar
@@ -196,7 +196,7 @@ async function modalEditarEquipo(equipoId, onDone) {
       </select>
     </label>
     <small class="muted">El rol del equipo no se cambia aquí (solo datos básicos).</small>
-  `), async (fd) => {
+  `, async (fd) => {
     const payload = {
       p_equipo_id: equipoId,
       p_codigo: fd.get("codigo"),
@@ -207,9 +207,8 @@ async function modalEditarEquipo(equipoId, onDone) {
     const { data, error: e2 } = await supabase.rpc("rpc_equipo_editar", payload);
     if (e2) throw new Error(e2.message);
     onDone?.(data);
-  }}
-
-
+  });
+}
 
 /**
  * Ensamblar componente (super-roles): usa rpc_equipo_agregar_componente
@@ -229,7 +228,7 @@ async function modalEnsamblar(equipoId, onDone) {
       <p class="muted">No hay componentes disponibles para ensamblar.</p>
     `, null, /* withSubmit */ false);
     return;
-  }}
+  }
 
   openFormModal(`
     <h4 style="margin:0 0 8px">Ensamblar componente</h4>
@@ -249,7 +248,7 @@ async function modalEnsamblar(equipoId, onDone) {
         <option value="true">Sí</option>
       </select>
     </label>
-  `), async (fd) => {
+  `, async (fd) => {
     const payload = {
       p_equipo_id: equipoId,
       p_componente_id: fd.get("comp"),
@@ -258,8 +257,8 @@ async function modalEnsamblar(equipoId, onDone) {
     const { data, error: e2 } = await supabase.rpc("rpc_equipo_agregar_componente", payload);
     if (e2) throw new Error(e2.message);
     onDone?.(data);
-};
-
+  });
+}
 
 /**
  * Quitar componente ensamblado (super-roles): usa rpc_equipo_quitar_componente
@@ -292,7 +291,7 @@ async function modalQuitar(equipoId, onDone) {
         `).join("")}
       </select>
     </label>
-  `), async (fd) => {
+  `, async (fd) => {
     const payload = {
       p_equipo_id: equipoId,
       p_componente_id: fd.get("comp"),
@@ -300,8 +299,8 @@ async function modalQuitar(equipoId, onDone) {
     const { data, error: e2 } = await supabase.rpc("rpc_equipo_quitar_componente", payload);
     if (e2) throw new Error(e2.message);
     onDone?.(data);
-  };
-
+  });
+}
 
 /**
  * Reportar falla desde equipo (centro + super-roles): usa rpc_equipo_reportar_falla
@@ -313,7 +312,7 @@ async function modalFallaDesdeEquipo(equipoId) {
     .eq("equipo_id", equipoId)
     .is("fecha_fin", null);
   if (error) throw new Error(error.message);
-}
+
   if (!comps || !comps.length) {
     openFormModal(`
       <h4 style="margin:0 0 8px">Reportar falla</h4>
@@ -337,7 +336,7 @@ async function modalFallaDesdeEquipo(equipoId) {
     <label>Detalle
       <textarea name="detalle" rows="3" required></textarea>
     </label>
-  `), async (fd) => {
+  `, async (fd) => {
     const payload = {
       p_equipo_id: equipoId,
       p_componente_id: fd.get("comp"),
@@ -346,7 +345,7 @@ async function modalFallaDesdeEquipo(equipoId) {
     const { data, error: e2 } = await supabase.rpc("rpc_equipo_reportar_falla", payload);
     if (e2) throw new Error(e2.message);
     alert(`Falla creada: ${data}`);
-  };
+  });
 }
 
 /* ========== Listeners públicos ========== */
@@ -379,5 +378,3 @@ export function initEquiposUI(requestReload) {
     }
   });
 }
-
-
