@@ -68,10 +68,12 @@ async function modalConfirmBaja(compId, serie, onDone){
   openFormModal(`
     <h4 style="margin:0 0 8px">Dar de baja lógica</h4>
     <p>¿Confirmas dar de baja el componente <strong>${serie || compId}</strong>?</p>
-  `, async ()=>{
+    <label>Motivo<textarea name="motivo" rows="3" placeholder="Opcional"></textarea></label>
+  `, async (fd)=>{
+    const motivo = fd.get("motivo")?.trim();
     const { data, error } = await supabase.rpc("rpc_componente_baja_logica", {
       p_componente_id: compId,
-      p_marcar_estado_baja: true
+      p_motivo: motivo ? motivo : null
     });
     if(error) throw new Error(error.message);
     onDone?.(data);
