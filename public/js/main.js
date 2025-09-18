@@ -71,17 +71,13 @@ function initTabs() {
 }
 
 /* ===== Equipos ===== */
-async function loadEquipos() {
+async function loadEquipos({ flash: showFlash = false } = {}) {
   const tbody = $("#eq-tbody");
   if (tbody) tbody.innerHTML = `Cargando…`;
   try {
     const data = await fetchEquipos();
     renderEquipos(data);
-    initEquiposUI(async () => {
-      const refreshed = await fetchEquipos();
-      renderEquipos(refreshed);
-      flash("Actualizado");
-    });
+    if (showFlash) flash("Actualizado");
   } catch (e) {
     console.error(e);
     if (tbody) tbody.innerHTML = `Error al cargar`;
@@ -90,17 +86,13 @@ async function loadEquipos() {
 }
 
 /* ===== Componentes ===== */
-async function loadComponentes() {
+async function loadComponentes({ flash: showFlash = false } = {}) {
   const tbody = $("#co-tbody");
   if (tbody) tbody.innerHTML = `Cargando…`;
   try {
     const data = await fetchComponentes();
     renderComponentes(data);
-    initComponentesUI(async () => {
-      const refreshed = await fetchComponentes();
-      renderComponentes(refreshed);
-      flash("Actualizado");
-    });
+    if (showFlash) flash("Actualizado");
   } catch (e) {
     console.error(e);
     if (tbody) tbody.innerHTML = `Error al cargar`;
@@ -122,12 +114,14 @@ async function init() {
   await initHeader();
   initTabs();
 
+  const requestEquiposReload = () => loadEquipos({ flash: true });
+  const requestComponentesReload = () => loadComponentes({ flash: true });
+
+  initEquiposUI(requestEquiposReload);
+  initComponentesUI(requestComponentesReload);
+
   // Tab por defecto
   await loadEquipos();
-
-  // Toolbar
-  $("#eq-refrescar")?.addEventListener("click", () => loadEquipos());
-  $("#co-refrescar")?.addEventListener("click", () => loadComponentes());
 }
 
 // Evitar doble init si el bundle carga dos veces por error

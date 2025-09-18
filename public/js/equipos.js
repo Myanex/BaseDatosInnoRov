@@ -358,23 +358,31 @@ export function initEquiposUI(requestReload) {
   const btnCrear = document.querySelector("#eq-crear");
   const btnRef   = document.querySelector("#eq-refrescar");
 
-  if (btnCrear) btnCrear.onclick = () => modalCrearEquipo(() => requestReload());
-  if (btnRef)   btnRef.onclick   = () => requestReload();
+  if (btnCrear) btnCrear.onclick = () => modalCrearEquipo(() => requestReload?.());
+  if (btnRef)   btnRef.onclick   = () => requestReload?.();
 
   // Delegación en la tabla
   const tbody = document.querySelector("#eq-tbody");
-  tbody.addEventListener("click", async (ev) => {
-    const b = ev.target.closest("button[data-act]");
-    if (!b) return;
-    const id  = b.dataset.id;
-    const act = b.dataset.act;
-    try {
-      if (act === "editar")    await modalEditarEquipo(id, () => requestReload());
-      if (act === "ensamblar") await modalEnsamblar(id, () => requestReload());
-      if (act === "quitar")    await modalQuitar(id, () => requestReload());
-      if (act === "falla")     await modalFallaDesdeEquipo(id);
-    } catch (err) {
-      alert(err?.message || err);
-    }
-  });
+  if (!tbody) return;
+
+  tbody.__eqRequestReload = requestReload;
+
+  if (!tbody.__eqListener) {
+    tbody.__eqListener = async (ev) => {
+      const b = ev.target.closest("button[data-act]");
+      if (!b) return;
+      const id  = b.dataset.id;
+      const act = b.dataset.act;
+      const reload = tbody.__eqRequestReload;
+      try {
+        if (act === "editar")    await modalEditarEquipo(id, () => reload?.());
+        if (act === "ensamblar") await modalEnsamblar(id, () => reload?.());
+        if (act === "quitar")    await modalQuitar(id, () => reload?.());
+        if (act === "falla")     await modalFallaDesdeEquipo(id);
+      } catch (err) {
+        alert(err?.message || err);
+      }
+    };
+    tbody.addEventListener("click", tbody.__eqListener);
+  }
 }
