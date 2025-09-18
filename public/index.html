@@ -2,155 +2,166 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>ROV · Inventario</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gestión ROV — MVP</title>
+  <!-- Estilo compacto, tema oscuro -->
   <style>
-    :root{color-scheme:dark light}
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
-      font-size:14px; line-height:1.35;
-      margin:0; background:#0b0f14; color:#e6ebf0;
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+      font-size: 14px; line-height: 1.35;
+      background: #0b1220; color: #e5e7eb;
     }
-    header{
-      display:flex; justify-content:space-between; align-items:center;
-      padding:10px 16px; background:#111827; border-bottom:1px solid #223
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; border-bottom: 1px solid #17233f; background: #0d162b;
+      position: sticky; top: 0; z-index: 10;
     }
-    #header-right{display:flex; gap:10px; align-items:center}
-    main{max-width:1100px; margin:0 auto; padding:16px}
-    .pill{padding:2px 8px; border:1px solid #334; border-radius:999px; font-size:12px; background:#0f1620}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .muted{opacity:.75}
+    header .info { font-size: 12px; color: #9ca3af; }
+    header .actions button { height: 30px; padding: 0 10px; border: 1px solid #293756; background: #101826; color: #e5e7eb; border-radius: 8px; cursor: pointer; }
+    main { padding: 14px; max-width: 1200px; margin: 0 auto; }
 
-    /* Panels */
-    .panel{display:none}
-    .panel.active{display:block}
-
-    /* Auth form compacto */
-    #view-auth form{
-      width:360px; max-width:92vw; margin:40px auto; padding:14px;
-      background:#0d141d; border:1px solid #223; border-radius:10px
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid #17233f; }
+    .tab-btn {
+      padding: 8px 12px; border: 1px solid #17233f; border-bottom: none; border-radius: 8px 8px 0 0;
+      background: #0f1a31; color: #cbd5e1; cursor: pointer;
     }
-    label{display:block; margin-bottom:8px}
-    input,select,button,textarea{
-      width:100%; font-size:14px;
-      background:#0f1620; color:#e6ebf0;
-      border:1px solid #334; border-radius:8px;
-      padding:6px 10px; height:36px
+    .tab-btn.active { background: #162549; color: #ffffff; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Toolbar */
+    .toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+    .toolbar button {
+      height: 36px; padding: 0 12px; background: #2563eb; color: white;
+      border: none; border-radius: 10px; cursor: pointer;
     }
-    textarea{height:auto; min-height:80px}
-    button{cursor:pointer}
-    button.small{height:32px; padding:4px 10px}
-    button[disabled]{opacity:.55; cursor:not-allowed}
+    .toolbar button.secondary { background: #111827; color: #e5e7eb; border: 1px solid #2b354a; }
 
-    /* Tabs compactas */
-    nav.tabs{display:flex; gap:6px; margin:6px 0 12px}
-    nav.tabs button{
-      background:#0f1620; border:1px solid #223; border-bottom:none;
-      border-radius:8px 8px 0 0; padding:6px 10px; height:34px; font-size:13px
+    /* Tabla */
+    table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+    thead th { text-align: left; padding: 8px 10px; font-weight: 600; color: #9ca3af; }
+    tbody tr { background: #0d162b; }
+    tbody td {
+      padding: 10px; border-top: 1px solid #1a2745; border-bottom: 1px solid #1a2745;
     }
-    nav.tabs button.active{background:#151f2c}
-
-    /* Tablas compactas */
-    table{width:100%; border-collapse:separate; border-spacing:0 6px}
-    th,td{text-align:left; padding:8px 10px; vertical-align:top; font-size:13px}
-    tbody tr{background:#0d141d; border:1px solid #223}
-    .actions{display:flex; gap:6px; flex-wrap:wrap}
-    .tag{display:inline-block; background:#192333; border:1px solid #294; padding:2px 6px; border-radius:6px; font-size:12px; margin-right:6px}
-
-    /* Toolbars */
-    .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0}
-    .toolbar select, .toolbar button{width:auto}
-
-    /* Modales compactos */
-    dialog{
-      background:#0d141d; color:#e6ebf0; border:1px solid #334; border-radius:8px;
-      padding:14px; width:420px; max-width:92vw
+    tbody tr td:first-child { border-left: 1px solid #1a2745; border-radius: 10px 0 0 10px; }
+    tbody tr td:last-child  { border-right: 1px solid #1a2745; border-radius: 0 10px 10px 0; }
+    .muted { color: #9ca3af; }
+    .tag {
+      display: inline-block; margin: 0 6px 6px 0; padding: 4px 8px; border: 1px solid #203055;
+      border-radius: 999px; font-size: 12px; color: #c7d2fe; background: #0b1530;
     }
-    dialog form > *{margin-bottom:8px}
+    .actions .small {
+      height: 30px; padding: 0 10px; margin: 2px 4px 0 0; border: 1px solid #2b354a;
+      background: #111827; color: #e5e7eb; border-radius: 8px; cursor: pointer;
+    }
+
+    /* Modal <dialog> */
+    dialog#modal-form {
+      width: min(520px, 92vw); border: 1px solid #223255; border-radius: 12px; padding: 0; background: #0f172a;
+      color: #e5e7eb;
+    }
+    dialog::backdrop { background: rgba(0,0,0,.6); }
+    #modal-form header {
+      padding: 12px 14px; border-bottom: 1px solid #1a2745; background: #111827;
+    }
+    #modal-form form { padding: 12px 14px 14px; }
+    label { display: grid; gap: 6px; margin: 8px 0; }
+    input, select, textarea {
+      width: 100%; height: 36px; padding: 0 10px; border: 1px solid #2b354a; border-radius: 8px; background: #0b1220; color: #e5e7eb;
+    }
+    textarea { height: auto; padding: 8px 10px; }
+    .row { display: flex; gap: 8px; }
+    .end { justify-content: flex-end; }
+    #toast {
+      position: fixed; right: 14px; bottom: 14px; background: #0f1a31; border: 1px solid #203055;
+      padding: 10px 12px; border-radius: 10px; display: none;
+    }
   </style>
 </head>
 <body>
-<header>
-  <div><strong>ROV · Inventario</strong></div>
-  <div id="header-right">
-    <div id="session-info" class="row muted"></div>
-    <button id="btn-logout" class="small" style="display:none">Salir</button>
-  </div>
-</header>
+  <header>
+    <div>
+      <strong>Gestión ROV</strong>
+      <div class="info" id="hdr-session">—</div>
+    </div>
+    <div class="actions">
+      <button id="btn-logout" title="Salir">Salir</button>
+    </div>
+  </header>
 
-<main>
-  <!-- LOGIN -->
-  <section id="view-auth" class="panel active">
-    <form id="form-login">
-      <label>Email<input type="email" id="email" required></label>
-      <label>Contraseña<input type="password" id="password" required></label>
-      <button type="submit">Entrar</button>
-      <div id="auth-alerts"></div>
-    </form>
-  </section>
+  <main>
+    <!-- Tabs -->
+    <div class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="equipos">Equipos</button>
+      <button class="tab-btn" data-tab="componentes">Componentes</button>
+    </div>
 
-  <!-- APP -->
-  <section id="view-app" class="panel">
-    <nav class="tabs">
-      <button data-tab="equipos" class="active">Equipos</button>
-      <button data-tab="componentes">Componentes</button>
-    </nav>
-
-    <section id="alerts"></section>
-
-    <!-- Equipos -->
-    <section id="panel-equipos" class="panel active">
+    <!-- Panel: Equipos -->
+    <section class="tab-panel active" id="tab-equipos">
       <div class="toolbar">
-        <button id="eq-crear">➕ Crear equipo</button>
-        <button id="eq-refrescar">Refrescar</button>
+        <button id="eq-crear">Crear equipo</button>
+        <button id="eq-refrescar" class="secondary">Refrescar</button>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Código</th>
-            <th>Rol</th>
-            <th>Centro</th>
-            <th>Componentes ensamblados</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="eq-tbody"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Equipo</th>
+              <th>Rol</th>
+              <th>Centro</th>
+              <th>Componentes ensamblados</th>
+              <th style="width:280px">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="eq-tbody">
+            <tr><td colspan="5" class="muted">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
-    <!-- Componentes -->
-    <section id="panel-componentes" class="panel">
+    <!-- Panel: Componentes (placeholder; la lógica vive en componentes.js) -->
+    <section class="tab-panel" id="tab-componentes">
       <div class="toolbar">
-        <button id="co-refrescar">Refrescar</button>
+        <button id="co-refrescar" class="secondary">Refrescar</button>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Serie</th>
-            <th>Tipo</th>
-            <th>Estado</th>
-            <th>Ubicación</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="co-tbody"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Serie</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th>Centro</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="co-tbody">
+            <tr><td colspan="5" class="muted">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
-  </section>
-</main>
+  </main>
 
-<!-- MODALES -->
-<dialog id="modal-form">
-  <form method="dialog" id="modal-form-content"></form>
-</dialog>
+  <!-- Modal genérico para formularios -->
+  <dialog id="modal-form">
+    <header><strong>Formulario</strong></header>
+    <form id="modal-form-content" method="dialog"></form>
+  </dialog>
 
-<!-- Librería Supabase y módulos de la app -->
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script type="module" src="./env.js"></script>
-<script type="module" src="./js/main.js"></script>
+  <!-- Toast simple -->
+  <div id="toast"></div>
+
+  <!-- Scripts: orden requerido -->
+  <script type="module" src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script type="module" src="/env.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </body>
 </html>
-
 
