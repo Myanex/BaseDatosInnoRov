@@ -1,101 +1,22 @@
 import { supabase, whoami } from "./supabaseClient.js";
+import { checkSession, logout } from "./auth.js";
 import { fetchEquipos, renderEquipos, initEquiposUI } from "./equipos.js";
+import { fetchComponentes, renderComponentes, initComponentesUI } from "./componentes.js";
 
-/* ===================== Helpers UI ===================== */
+/* ========== Helpers ========== */
 const $  = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 function flash(msg, ms = 2200) {
   const el = $("#toast");
-  if (!el) return alert(msg);
+  if (!el) return console.log(msg);
   el.textContent = msg;
   el.style.display = "block";
   setTimeout(() => { el.style.display = "none"; }, ms);
 }
 
-function toggleApp(visible) {
-  const app   = $("#tab-equipos")?.closest("main") || document.body; // fallback
-  const login = $("#login-dyn");
-  if (visible) {
-    if (app) app.style.display = "";
-    if (login) login.remove();
-  } else {
-    if (app) app.style.display = "none";
-    if (!login) renderLoginOverlay();
-  }
-}
-
-/* ===================== Login Overlay (dinámico) ===================== */
-function renderLoginOverlay() {
-  const existing = $("#login-dyn");
-  if (existing) return;
-  const wrap = document.createElement("div");
-  wrap.id = "login-dyn";
-  wrap.innerHTML = `
-    
-    
-
-      
-Iniciar sesión
-
-      
-Email
-        
-
-      
-Contraseña
-        
-
-      
-Entrar
-
-      
-Usa tus credenciales de Supabase Auth.
-
-
-    
-
-  `;
-  document.body.appendChild(wrap);
-  $("#btn-login")?.addEventListener("click", async () => {
-    const email = $("#login-email")?.value?.trim();
-    const pass  = $("#login-pass")?.value ?? "";
-    if (!email || !pass) { flash("Completa email y contraseña"); return; }
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-      if (error) throw error;
-      location.reload();
-    } catch (e) {
-      $("#login-msg").textContent = e?.message || "No se pudo iniciar sesión";
-    }
-  });
-}
-
-/* ===================== Tabs ===================== */
-function initTabs() {
-  const tabsWrap = $("#tabs");
-  if (!tabsWrap) return;
-  const btns = $$(".tab-btn", tabsWrap);
-  btns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const target = btn.dataset.tab;
-      btns.forEach(b => b.classList.toggle("active", b === btn));
-      $$(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${target}`));
-      if (target === "equipos") {
-        if (!$("#eq-tbody")?.children?.length) loadEquipos();
-      } else if (target === "componentes") {
-        const tbody = $("#co-tbody");
-        if (tbody && !tbody.dataset.filled) {
-          tbody.innerHTML = `Pendiente…`;
-          tbody.dataset.filled = "1";
-        }
-      }
-    });
-  });
-}
-
-/* ===================== Header / Sesión ===================== */
-async function updateHeader() {
+/* ========== Header / Sesión ========== */
+async function initHeader() {
   const hdr = $("#hdr-session");
   try {
     const me = await whoami().catch(() => null);
@@ -110,21 +31,40 @@ async function updateHeader() {
   } catch {
     if (hdr) hdr.textContent = "—";
   }
-}
-
-function initLogout() {
+  // Logout
   $("#btn-logout")?.addEventListener("click", async () => {
     try {
-      await supabase.auth.signOut();
+      await logout();
+    } catch (e) {
+      // fallback directo si no existe logout o falla
+      try { await supabase?.auth?.signOut?.(); } catch {}
     } finally {
-      // Mostrar login y limpiar UI
-      toggleApp(false);
-      location.reload();
+      // volver a la página raíz (login)
+      location.href = "/";
     }
   });
 }
 
-/* ===================== Equipos ===================== */
+/* ========== Tabs ========== */
+function initTabs() {
+  const tabsWrap = $("#tabs");
+  if (!tabsWrap) return;
+  const btns = $$(".tab-btn", tabsWrap);
+  btns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.tab;
+      btns.forEach(b => b.classList.toggle("active", b === btn));
+      $$(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${target}`));
+      if (target === "equipos") {
+        loadEquipos();
+      } else if (target === "componentes") {
+        loadComponentes();
+      }
+    });
+  });
+}
+
+/* ========== Equipos ========== */
 async function loadEquipos() {
   const tbody = $("#eq-tbody");
   if (tbody) tbody.innerHTML = `Cargando…`;
@@ -143,32 +83,54 @@ async function loadEquipos() {
   }
 }
 
-/* ===================== Bootstrap ===================== */
-async function startApp() {
-  initTabs();
-  initLogout();
-  await updateHeader();
-  await loadEquipos();
+/* ========== Componentes ========== */
+async function loadComponentes() {
+  const tbody = $("#co-tbody");
+  if (tbody) tbody.innerHTML = `Cargando…`;
+  try {
+    const data = await fetchComponentes();
+    renderComponentes(data);
+    initComponentesUI(async () => {
+      const refreshed = await fetchComponentes();
+      renderComponentes(refreshed);
+      flash("Actualizado");
+    });
+  } catch (e) {
+    console.error(e);
+    if (tbody) tbody.innerHTML = `Error al cargar`;
+    flash("Error al cargar componentes");
+  }
 }
 
+/* ========== Bootstrap ========== */
 async function init() {
   // Esperar DOM listo
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });
     return;
   }
-  // Ver estado de sesión
-  const { data } = await supabase.auth.getSession();
-  const hasSession = !!data?.session;
-  toggleApp(hasSession);
-  if (hasSession) {
-    await startApp();
-  } else {
-    // escuchar cambios para login
-    supabase.auth.onAuthStateChange((ev, sess) => {
-      if (sess) location.reload();
-    });
+
+  // Verificar sesión con el módulo existente
+  try {
+    await checkSession(); // asume redirect interno si no hay sesión
+  } catch (e) {
+    // Si checkSession no hace redirect, hacemos un fallback simple
+    const { data } = await supabase.auth.getSession();
+    if (!data?.session) {
+      location.href = "/";
+      return;
+    }
   }
+
+  await initHeader();
+  initTabs();
+
+  // Cargar tab activa por defecto (Equipos)
+  await loadEquipos();
+
+  // Wire toolbar sin romper si no existen
+  $("#eq-refrescar")?.addEventListener("click", () => loadEquipos());
+  $("#co-refrescar")?.addEventListener("click", () => loadComponentes());
 }
 
 init();
