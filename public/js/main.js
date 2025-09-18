@@ -1,4 +1,4 @@
-import { supabase, whoami } from "./supabaseClient.js";
+import { supabase, whoami, fetchProfileAndCentro } from "./supabaseClient.js";
 import { checkSession, logout } from "./auth.js";
 import { fetchEquipos, renderEquipos, initEquiposUI } from "./equipos.js";
 import { fetchComponentes, renderComponentes, initComponentesUI } from "./componentes.js";
@@ -21,10 +21,27 @@ async function initHeader() {
   const hdr = $("#hdr-session");
   try {
     const me = await whoami().catch(() => null);
-    if (hdr && me) {
-      const role = me?.role ?? "—";
-      const email = me?.email ?? "—";
-      const centro = me?.centro_nombre ?? "—";
+    let extra = null;
+    if (me) {
+      try {
+        extra = await fetchProfileAndCentro(me.user_id, me.centro_id);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    let merged = null;
+    if (me || extra) {
+      merged = { ...(me ?? {}), ...(extra ?? {}) };
+      if (me?.role !== undefined) {
+        merged.role = me.role;
+      }
+    }
+
+    if (hdr && merged) {
+      const role = me?.role ?? merged?.role ?? "—";
+      const email = merged?.email ?? me?.email ?? "—";
+      const centro = merged?.centro_nombre ?? me?.centro_nombre ?? "—";
       hdr.textContent = `${email} · Rol: ${role} · Centro: ${centro}`;
     } else if (hdr) {
       hdr.textContent = "—";
