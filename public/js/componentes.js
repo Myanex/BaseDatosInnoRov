@@ -79,17 +79,26 @@ async function modalConfirmBaja(compId, serie, onDone){
 }
 
 export function initComponentesUI(requestReload){
-  document.querySelector("#co-refrescar").onclick = ()=> requestReload();
+  const btnRefrescar = document.querySelector("#co-refrescar");
+  if (btnRefrescar) btnRefrescar.onclick = () => requestReload?.();
 
-  document.querySelector("#co-tbody").addEventListener("click", async ev=>{
-    const b = ev.target.closest("button[data-act]"); if(!b) return;
-    const id = b.dataset.id, act = b.dataset.act, serie = b.dataset.serie;
-    try{
-      if(act==="co-falla") await modalFallaComponente(id, serie);
-      if(act==="co-baja")  await modalConfirmBaja(id, serie, ()=>requestReload());
-    }catch(err){
-      alert(err.message || err);
-    }
-  });
+  const tbody = document.querySelector("#co-tbody");
+  if (!tbody) return;
+
+  tbody.__coRequestReload = requestReload;
+  if (!tbody.__coListener) {
+    tbody.__coListener = async (ev)=>{
+      const b = ev.target.closest("button[data-act]"); if(!b) return;
+      const id = b.dataset.id, act = b.dataset.act, serie = b.dataset.serie;
+      const reload = tbody.__coRequestReload;
+      try{
+        if(act==="co-falla") await modalFallaComponente(id, serie);
+        if(act==="co-baja")  await modalConfirmBaja(id, serie, ()=>reload?.());
+      }catch(err){
+        alert(err.message || err);
+      }
+    };
+    tbody.addEventListener("click", tbody.__coListener);
+  }
 }
 
