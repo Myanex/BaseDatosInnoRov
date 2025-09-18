@@ -3,10 +3,9 @@ import { checkSession, logout } from "./auth.js";
 import { fetchEquipos, renderEquipos, initEquiposUI } from "./equipos.js";
 import { fetchComponentes, renderComponentes, initComponentesUI } from "./componentes.js";
 
-/* ========== Guards (evita reinicializaciones y loops) ========== */
+/* ========== Guards (single init) ========== */
 if (window.__ROV_MAIN_INITED__) {
-  // Si este módulo se cargó dos veces por error, salimos.
-  console.warn("main.js ya inicializado, omitiendo segunda carga.");
+  console.warn("main.js ya inicializado — omitiendo segunda carga.");
 } else {
   window.__ROV_MAIN_INITED__ = true;
 
@@ -23,13 +22,37 @@ if (window.__ROV_MAIN_INITED__) {
     el.__t = setTimeout(() => { el.style.display = "none"; }, ms);
   }
 
-  /* Evita doble-binding en botones */
   function bindOnce(el, ev, fn) {
     if (!el) return;
     const key = `__wired_${ev}`;
     if (el[key]) return;
     el.addEventListener(ev, fn);
     el[key] = true;
+  }
+
+  /* ========== Logout robusto (incluye forzado) ========== */
+  async function forceSignOut() {
+    try {
+      // 1) Intento normal
+      await logout?.().catch(()=>{});
+      await supabase?.auth?.signOut?.().catch(()=>{});
+    } finally {
+      // 2) Limpieza local (por si quedó sesión "anónima" o tokens colgados)
+      try {
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (k.startsWith("sb-") && (k.endsWith("-auth-token") || k.endsWith("-persist"))) {
+            toRemove.push(k);
+          }
+        }
+        toRemove.forEach(k => localStorage.removeItem(k));
+      } catch {}
+      try { sessionStorage.clear(); } catch {}
+      // 3) Redirigir a raíz (pantalla de login)
+      location.href = "/";
+    }
   }
 
   /* ========== Header / Sesión ========== */
@@ -48,15 +71,9 @@ if (window.__ROV_MAIN_INITED__) {
     } catch {
       if (hdr) hdr.textContent = "—";
     }
-    // Logout (redirige a inicio sin recargar en bucle)
+    // Logout: siempre disponible, incluso si hay estado "Anon"
     bindOnce($("#btn-logout"), "click", async () => {
-      try {
-        await logout();
-      } catch (e) {
-        try { await supabase?.auth?.signOut?.(); } catch {}
-      } finally {
-        location.href = "/";
-      }
+      await forceSignOut();
     });
   }
 
@@ -71,9 +88,9 @@ if (window.__ROV_MAIN_INITED__) {
         btns.forEach(b => b.classList.toggle("active", b === btn));
         $$(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${target}`));
         if (target === "equipos") {
-          loadEquipos(/* fromTab */ true);
+          loadEquipos(true);
         } else if (target === "componentes") {
-          loadComponentes(/* fromTab */ true);
+          loadComponentes(true);
         }
       });
     });
@@ -82,7 +99,7 @@ if (window.__ROV_MAIN_INITED__) {
   /* ========== Equipos ========== */
   let equiposInFlight = false;
   async function loadEquipos(fromTab = false) {
-    if (equiposInFlight) return; // debounce
+    if (equiposInFlight) return;
     equiposInFlight = true;
     const tbody = $("#eq-tbody");
     if (tbody && !fromTab) {
@@ -91,7 +108,6 @@ if (window.__ROV_MAIN_INITED__) {
     try {
       const data = await fetchEquipos();
       renderEquipos(data);
-      // wire acciones 1 sola vez; refresco usando callback interna
       initEquiposUI(async () => {
         if (equiposInFlight) return;
         const refreshed = await fetchEquipos();
@@ -111,7 +127,7 @@ if (window.__ROV_MAIN_INITED__) {
   let componentesLoadedOnce = false;
   let componentesInFlight = false;
   async function loadComponentes(fromTab = false) {
-    if (componentesInFlight) return; // debounce
+    if (componentesInFlight) return;
     componentesInFlight = true;
     const tbody = $("#co-tbody");
     if (tbody && (!componentesLoadedOnce || !fromTab)) {
@@ -120,7 +136,6 @@ if (window.__ROV_MAIN_INITED__) {
     try {
       const data = await fetchComponentes();
       renderComponentes(data);
-      // Inicializa acciones solo una vez
       if (!componentesLoadedOnce) {
         initComponentesUI(async () => {
           if (componentesInFlight) return;
@@ -144,11 +159,11 @@ if (window.__ROV_MAIN_INITED__) {
     await initHeader();
     initTabs();
 
-    // Wire toolbar una sola vez
+    // Botones de toolbar una sola vez
     bindOnce($("#eq-refrescar"), "click", () => loadEquipos());
     bindOnce($("#co-refrescar"), "click", () => loadComponentes());
 
-    // Carga inicial (Equipos)
+    // Carga inicial — Equipos
     await loadEquipos();
   }
 
@@ -157,12 +172,22 @@ if (window.__ROV_MAIN_INITED__) {
       document.addEventListener("DOMContentLoaded", init, { once: true });
       return;
     }
-    // Respeta tu flujo de auth.js: si no hay sesión, se encarga internamente
+
+    // Si cambia el estado de auth, actuamos (p. ej., cierre de sesión desde otra pestaña)
+    try {
+      supabase?.auth?.onAuthStateChange?.((event, session) => {
+        if (!session) {
+          // Sin sesión => llevar a raíz (pantalla login)
+          location.href = "/";
+        }
+      });
+    } catch {}
+
+    // Respeta tu flujo: checkSession hace la validación/redirección
     try {
       await checkSession();
-    } catch (e) {
-      // Si tu checkSession ya redirige, no hacemos nada aquí
-    }
+    } catch {}
+
     await start();
   }
 
