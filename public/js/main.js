@@ -3,7 +3,7 @@ import { checkSession, logout } from "./auth.js";
 import { fetchEquipos, renderEquipos, initEquiposUI } from "./equipos.js";
 import { fetchComponentes, renderComponentes, initComponentesUI } from "./componentes.js";
 
-/* ========== Guards (single init) ========== */
+/* ========== Single init guard ========== */
 if (window.__ROV_MAIN_INITED__) {
   console.warn("main.js ya inicializado — omitiendo segunda carga.");
 } else {
@@ -30,32 +30,7 @@ if (window.__ROV_MAIN_INITED__) {
     el[key] = true;
   }
 
-  /* ========== Logout robusto (incluye forzado) ========== */
-  async function forceSignOut() {
-    try {
-      // 1) Intento normal
-      await logout?.().catch(()=>{});
-      await supabase?.auth?.signOut?.().catch(()=>{});
-    } finally {
-      // 2) Limpieza local (por si quedó sesión "anónima" o tokens colgados)
-      try {
-        const toRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (!k) continue;
-          if (k.startsWith("sb-") && (k.endsWith("-auth-token") || k.endsWith("-persist"))) {
-            toRemove.push(k);
-          }
-        }
-        toRemove.forEach(k => localStorage.removeItem(k));
-      } catch {}
-      try { sessionStorage.clear(); } catch {}
-      // 3) Redirigir a raíz (pantalla de login)
-      location.href = "/";
-    }
-  }
-
-  /* ========== Header / Sesión ========== */
+  /* ========== Header / Sesión (sin redirecciones automáticas) ========== */
   async function initHeader() {
     const hdr = $("#hdr-session");
     try {
@@ -71,9 +46,22 @@ if (window.__ROV_MAIN_INITED__) {
     } catch {
       if (hdr) hdr.textContent = "—";
     }
-    // Logout: siempre disponible, incluso si hay estado "Anon"
+    // Logout sólo cuando el usuario lo pide
     bindOnce($("#btn-logout"), "click", async () => {
-      await forceSignOut();
+      try { await logout?.(); } catch {}
+      try { await supabase?.auth?.signOut?.(); } catch {}
+      // Limpia tokens locales por si quedan restos
+      try {
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("sb-") && (k.endsWith("-auth-token") || k.endsWith("-persist"))) toRemove.push(k);
+        }
+        toRemove.forEach(k => localStorage.removeItem(k));
+      } catch {}
+      try { sessionStorage.clear(); } catch {}
+      // Redirigir a la raíz una sola vez
+      location.href = "/";
     });
   }
 
@@ -96,7 +84,7 @@ if (window.__ROV_MAIN_INITED__) {
     });
   }
 
-  /* ========== Equipos ========== */
+  /* ========== Equipos (debounced) ========== */
   let equiposInFlight = false;
   async function loadEquipos(fromTab = false) {
     if (equiposInFlight) return;
@@ -123,7 +111,7 @@ if (window.__ROV_MAIN_INITED__) {
     }
   }
 
-  /* ========== Componentes ========== */
+  /* ========== Componentes (debounced, single-wire) ========== */
   let componentesLoadedOnce = false;
   let componentesInFlight = false;
   async function loadComponentes(fromTab = false) {
@@ -158,12 +146,10 @@ if (window.__ROV_MAIN_INITED__) {
   async function start() {
     await initHeader();
     initTabs();
-
-    // Botones de toolbar una sola vez
+    // Wire toolbar una sola vez
     bindOnce($("#eq-refrescar"), "click", () => loadEquipos());
     bindOnce($("#co-refrescar"), "click", () => loadComponentes());
-
-    // Carga inicial — Equipos
+    // Carga inicial
     await loadEquipos();
   }
 
@@ -172,22 +158,8 @@ if (window.__ROV_MAIN_INITED__) {
       document.addEventListener("DOMContentLoaded", init, { once: true });
       return;
     }
-
-    // Si cambia el estado de auth, actuamos (p. ej., cierre de sesión desde otra pestaña)
-    try {
-      supabase?.auth?.onAuthStateChange?.((event, session) => {
-        if (!session) {
-          // Sin sesión => llevar a raíz (pantalla login)
-          location.href = "/";
-        }
-      });
-    } catch {}
-
-    // Respeta tu flujo: checkSession hace la validación/redirección
-    try {
-      await checkSession();
-    } catch {}
-
+    // Validación de sesión sin redirigir ni recargar
+    try { await checkSession(); } catch {}
     await start();
   }
 
