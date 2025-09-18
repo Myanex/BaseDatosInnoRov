@@ -1,11 +1,9 @@
 import { supabase, whoami } from "./supabaseClient.js";
 import { fetchEquipos, renderEquipos, initEquiposUI } from "./equipos.js";
-// componentes.js es opcional por ahora; protegemos los imports dinámicamente si no existe.
-// import { fetchComponentes, renderComponentes, initComponentesUI } from "./componentes.js";
 
-/* ========== Utilidades UI ========== */
-function $(s, r = document) { return r.querySelector(s); }
-function $all(s, r = document) { return Array.from(r.querySelectorAll(s)); }
+/* ===================== Helpers UI ===================== */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 function flash(msg, ms = 2200) {
   const el = $("#toast");
@@ -15,50 +13,92 @@ function flash(msg, ms = 2200) {
   setTimeout(() => { el.style.display = "none"; }, ms);
 }
 
-/* ========== Tabs ========== */
+function toggleApp(visible) {
+  const app   = $("#tab-equipos")?.closest("main") || document.body; // fallback
+  const login = $("#login-dyn");
+  if (visible) {
+    if (app) app.style.display = "";
+    if (login) login.remove();
+  } else {
+    if (app) app.style.display = "none";
+    if (!login) renderLoginOverlay();
+  }
+}
+
+/* ===================== Login Overlay (dinámico) ===================== */
+function renderLoginOverlay() {
+  const existing = $("#login-dyn");
+  if (existing) return;
+  const wrap = document.createElement("div");
+  wrap.id = "login-dyn";
+  wrap.innerHTML = `
+    
+    
+
+      
+Iniciar sesión
+
+      
+Email
+        
+
+      
+Contraseña
+        
+
+      
+Entrar
+
+      
+Usa tus credenciales de Supabase Auth.
+
+
+    
+
+  `;
+  document.body.appendChild(wrap);
+  $("#btn-login")?.addEventListener("click", async () => {
+    const email = $("#login-email")?.value?.trim();
+    const pass  = $("#login-pass")?.value ?? "";
+    if (!email || !pass) { flash("Completa email y contraseña"); return; }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) throw error;
+      location.reload();
+    } catch (e) {
+      $("#login-msg").textContent = e?.message || "No se pudo iniciar sesión";
+    }
+  });
+}
+
+/* ===================== Tabs ===================== */
 function initTabs() {
   const tabsWrap = $("#tabs");
-  if (!tabsWrap) return; // evita null
-  const btns = $all(".tab-btn", tabsWrap);
+  if (!tabsWrap) return;
+  const btns = $$(".tab-btn", tabsWrap);
   btns.forEach(btn => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.tab;
-      // activar botón
       btns.forEach(b => b.classList.toggle("active", b === btn));
-      // activar panel
-      $all(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${target}`));
+      $$(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${target}`));
       if (target === "equipos") {
-        // recargar bajo demanda si tbody vació
         if (!$("#eq-tbody")?.children?.length) loadEquipos();
       } else if (target === "componentes") {
-        // placeholder seguro
-        if ($("#co-tbody")?.children?.length === 0) {
-          $("#co-tbody").innerHTML = `Pendiente…`;
+        const tbody = $("#co-tbody");
+        if (tbody && !tbody.dataset.filled) {
+          tbody.innerHTML = `Pendiente…`;
+          tbody.dataset.filled = "1";
         }
       }
     });
   });
 }
 
-/* ========== Sesión / Header ========== */
-async function initHeader() {
+/* ===================== Header / Sesión ===================== */
+async function updateHeader() {
   const hdr = $("#hdr-session");
-  const btnLogout = $("#btn-logout");
-  if (btnLogout) {
-    btnLogout.addEventListener("click", async () => {
-      try {
-        // logout suave (si auth.js no está, usamos supabase directo)
-        if (supabase?.auth?.signOut) await supabase.auth.signOut();
-        location.reload();
-      } catch (e) {
-        console.error(e);
-        flash("No se pudo cerrar sesión");
-      }
-    });
-  }
   try {
-    // whoami() viene de supabaseClient.js; si no existe, mostramos placeholder
-    const me = typeof whoami === "function" ? await whoami() : null;
+    const me = await whoami().catch(() => null);
     if (hdr && me) {
       const role = me?.role ?? "—";
       const email = me?.email ?? "—";
@@ -72,14 +112,25 @@ async function initHeader() {
   }
 }
 
-/* ========== Equipos ========== */
+function initLogout() {
+  $("#btn-logout")?.addEventListener("click", async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // Mostrar login y limpiar UI
+      toggleApp(false);
+      location.reload();
+    }
+  });
+}
+
+/* ===================== Equipos ===================== */
 async function loadEquipos() {
   const tbody = $("#eq-tbody");
   if (tbody) tbody.innerHTML = `Cargando…`;
   try {
     const data = await fetchEquipos();
     renderEquipos(data);
-    // wire de acciones con función de recarga
     initEquiposUI(async () => {
       const refreshed = await fetchEquipos();
       renderEquipos(refreshed);
@@ -92,26 +143,32 @@ async function loadEquipos() {
   }
 }
 
-/* ========== Bootstrap ========== */
+/* ===================== Bootstrap ===================== */
+async function startApp() {
+  initTabs();
+  initLogout();
+  await updateHeader();
+  await loadEquipos();
+}
+
 async function init() {
-  // Asegura que el DOM esté listo antes de enlazar listeners
+  // Esperar DOM listo
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });
     return;
   }
-  // Inicializa header, tabs y contenido inicial
-  await initHeader();
-  initTabs();
-  await loadEquipos();
-
-  // Botones toolbar si existen
-  $("#eq-crear")?.addEventListener("click", () => {}); // el wiring real vive en equipos.js
-  $("#eq-refrescar")?.addEventListener("click", () => loadEquipos());
-  $("#co-refrescar")?.addEventListener("click", () => {
-    // placeholder seguro
-    const tbody = $("#co-tbody");
-    if (tbody) tbody.innerHTML = `Pendiente…`;
-  });
+  // Ver estado de sesión
+  const { data } = await supabase.auth.getSession();
+  const hasSession = !!data?.session;
+  toggleApp(hasSession);
+  if (hasSession) {
+    await startApp();
+  } else {
+    // escuchar cambios para login
+    supabase.auth.onAuthStateChange((ev, sess) => {
+      if (sess) location.reload();
+    });
+  }
 }
 
 init();
