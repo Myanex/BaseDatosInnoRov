@@ -1,17 +1,13 @@
-# Diagnóstico de base de datos
+# Diagnóstico CI DB — K3 autofix
 
-## Resumen
-- Las migraciones viven en `supabase/migrations/` (2 archivos SQL).
-- No hay archivos sueltos en `migrations/` (directorio eliminado).
-- El smoke (`tests/sql/smoke.sql`) mantiene los checks núcleo y los bloques de RLS/guards.
+## Problema detectado
+- El job `postgres` del workflow `DB — Migrations & Smoke` intentaba descargar la imagen `supabase/postgres:15.1.0` que fue retirada del registry, por lo que el servicio de base de datos nunca iniciaba.
 
-## Listado de migraciones
-| Archivo | Contenido destacado |
-| --- | --- |
-| `20240711090000__estructura_base.sql` | Estructura base (empresas→zonas→centros, identidad, inventario, operativa, bitácora, auditoría) + RLS habilitado. |
-| `20240711090500__rls_y_rpcs.sql` | Helpers de sesión, guards, policies RLS y RPCs transaccionales con auditoría. |
+## Acciones correctivas
+- Parametricé la imagen de base de datos mediante `DB_IMAGE`, usando `postgres:15` como valor por defecto.
+- Añadí un paso explícito para mostrar el valor efectivo de la imagen y dejé el listado del directorio de migraciones antes de aplicarlas (requerido para el diagnóstico).
+- Confirmé que las migraciones y el smoke test existentes cumplen los requisitos de RLS, guardas y bloque de seed comentado.
 
-## Notas
-- Los enums principales (`role_enum`, `equipo_estado`, `prestamo_estado`, `movimiento_estado`) se autoajustan si faltan valores.
-- Las RPCs registran eventos en `audit_event` y usan los guards (`assert_*`).
-- El smoke incluye los marcadores `-- CI_SEED_CHECK_START/END` y deja el seed comentado para pasar en entornos sin datos.
+## Resultado esperado
+- El workflow ahora puede levantar Postgres usando una imagen disponible (`postgres:15`), aplicar migraciones en orden y ejecutar el smoke test sin dependencias de seed manual.
+- En caso de necesitar otra imagen compatible (ej. `supabase/postgres:15`), basta con definir el `env`/`var` `DB_IMAGE` en el workflow o en GitHub.
