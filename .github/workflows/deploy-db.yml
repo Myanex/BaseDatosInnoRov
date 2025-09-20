@@ -1,0 +1,49 @@
+name: Deploy DB (Supabase CLI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Entorno destino (dev/prod)"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show inputs
+        run: echo "Target = ${{ github.event.inputs.target }}"
+
+      - name: Install Supabase CLI
+        run: |
+          curl -L https://github.com/supabase/cli/releases/download/v1.170.3/supabase_1.170.3_linux_amd64.tar.gz \
+            | tar -xz && sudo mv supabase /usr/local/bin/supabase
+          supabase --version
+
+      - name: Supabase login
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Link project
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: List migrations
+        run: |
+          echo "Migrations in supabase/migrations:"
+          ls -al supabase/migrations || true
+
+      - name: Push migrations
+        run: supabase db push
+
+      # (Opcional) Verificación ligera post-push (solo estructura; no usa credenciales)
+      - name: Post-push note
+        run: echo "Migraciones aplicadas. Revisa Supabase Studio para confirmar."
