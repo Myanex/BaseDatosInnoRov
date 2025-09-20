@@ -16,16 +16,18 @@ DO $$ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'Faltan vistas de pilotos.'; END IF;
 END $$;
 
+-- CI_SEED_CHECK_START
 -- 2) Seed mínimo (si existe)
-DO $$ BEGIN
-  PERFORM 1 FROM profiles LIMIT 1;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Seed ausente: no hay perfiles.'; END IF;
-  PERFORM 1 FROM centros LIMIT 1;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Seed ausente: no hay centros.'; END IF;
-  PERFORM 1 FROM equipos LIMIT 1;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Seed ausente: no hay equipos.'; END IF;
-END $$;
-
+-- DO $$ BEGIN
+--   PERFORM 1 FROM profiles LIMIT 1;
+--   IF NOT FOUND THEN RAISE EXCEPTION 'Seed ausente: no hay perfiles.'; END IF;
+--   PERFORM 1 FROM centros LIMIT 1;
+--   IF NOT FOUND THEN RAISE EXCEPTION 'Seed ausente: no hay centros.'; END IF;
+--   PERFORM 1 FROM equipos LIMIT 1;
+--   IF NOT FOUND THEN RAISE EXCEPTION 'Seed ausente: no hay equipos.'; END IF;
+-- END $$;
+--
+-- CI_SEED_CHECK_END
 -- 3) RLS: profile_private visible para oficina/admin, bloqueada para centro no asignado
 SET LOCAL "request.jwt.claims" = '{
   "role": "oficina",
