@@ -40,7 +40,12 @@ jobs:
           PGPASSWORD: postgres
         run: |
           set -e
-          for f in $(ls -1 supabase/migrations/*.sql | sort); do
+          echo "Listing supabase/migrations:"
+          ls -al supabase/migrations || true
+          echo "Listing root migrations:"
+          ls -al migrations || true
+
+          for f in $(find supabase/migrations migrations -maxdepth 1 -name "*.sql" | sort); do
             echo ">> Applying $f"
             psql "postgresql://postgres:postgres@localhost:5432/appdb" -v ON_ERROR_STOP=1 -f "$f"
           done
