@@ -1,0 +1,52 @@
+name: DB — Migrations & Smoke
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  db-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Opción A: Postgres vanilla
+        image: postgres:15
+        # Opción B (descomentar si necesitas Supabase):
+        # image: supabase/postgres:15.1.0
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: appdb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for DB
+        run: |
+          for i in {1..60}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 2
+          done
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -e
+          for f in $(ls -1 supabase/migrations/*.sql | sort); do
+            echo ">> Applying $f"
+            psql "postgresql://postgres:postgres@localhost:5432/appdb" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Run smoke tests
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/appdb" -v ON_ERROR_STOP=1 -f tests/sql/smoke.sql
