@@ -29,12 +29,15 @@ END $$;
 --
 -- CI_SEED_CHECK_END
 -- 3) RLS: profile_private visible para oficina/admin, bloqueada para centro no asignado
+BEGIN;
 SET LOCAL "request.jwt.claims" = '{
   "role": "oficina",
   "user_id": "00000000-0000-0000-0000-000000000001"
 }';
 SELECT 1 FROM profile_private LIMIT 1;
+COMMIT;
 
+BEGIN;
 SET LOCAL "request.jwt.claims" = '{
   "role": "centro",
   "centro_id": null,
@@ -47,8 +50,10 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END $$;
+COMMIT;
 
 -- 4) Guard de asignación
+BEGIN;
 SET LOCAL "request.jwt.claims" = '{
   "role": "centro",
   "centro_id": null,
@@ -61,3 +66,4 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege OR raise_exception THEN NULL;
   END;
 END $$;
+COMMIT;

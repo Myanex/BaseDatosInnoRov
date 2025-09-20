@@ -11,13 +11,12 @@
 - **Guard de asignación no lanzó**: revisar `assert_actor_asignado()`.
 
 ## Imagen de la DB
-- Por defecto usamos `postgres:15`.
-- Si usas funciones/claims como en Supabase (ej. `auth.jwt()`), cambia la imagen del servicio a `supabase/postgres:15.1.0` en `.github/workflows/db-ci.yml`.
+- Por defecto usamos `supabase/postgres:15.1.0` porque las migraciones consultan `auth.jwt()` y extensiones propias.
+- Si necesitas otra versión, ajusta la imagen del servicio en `.github/workflows/db-ci.yml` (mantén compatibilidad con claims).
 
 ## Seed
-- El smoke asume seed mínimo. Si aún no está en migraciones:
-  - (Temporal) comenta el bloque “Seed” del `smoke.sql`.
-  - (Recomendado) agrega tu seed (Prompt 4) dentro de `supabase/migrations/` para que CI lo aplique antes del smoke.
+- El smoke incluye el bloque de seed entre `-- CI_SEED_CHECK_START/END` y permanece comentado por defecto (pasa sin datos).
+- Cuando sumes el Prompt 4 a migraciones, descomenta ese bloque para validar el seed mínimo durante el CI.
 
 ## Siguiente
 - Extender smoke con RPCs (crear/enviar/recibir movimiento) y validar autocierre de préstamos al **recibir**.
