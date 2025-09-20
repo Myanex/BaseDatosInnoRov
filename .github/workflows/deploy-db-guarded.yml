@@ -1,0 +1,87 @@
+name: Deploy DB (Guarded)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Entorno destino"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+jobs:
+  ci-check:
+    runs-on: ubuntu-latest
+    env:
+      DB_IMAGE: ${{ vars.DB_IMAGE != '' && vars.DB_IMAGE || 'postgres:15' }}
+    services:
+      postgres:
+        image: ${{ env.DB_IMAGE }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: appdb
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show DB image
+        run: echo "Using DB image: $DB_IMAGE"
+
+      - name: Wait for DB
+        run: |
+          for i in {1..60}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 2
+          done
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: List migrations
+        run: |
+          echo "Migrations in supabase/migrations:"
+          ls -al supabase/migrations || true
+
+      - name: Apply migrations (ephemeral)
+        env: { PGPASSWORD: postgres }
+        run: |
+          set -e
+          for f in $(ls -1 supabase/migrations/*.sql 2>/dev/null | sort); do
+            echo ">> Applying $f"
+            psql "postgresql://postgres:postgres@localhost:5432/appdb" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Run smoke tests
+        env: { PGPASSWORD: postgres }
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/appdb" -v ON_ERROR_STOP=1 -f tests/sql/smoke.sql
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [ci-check]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        run: |
+          curl -L https://github.com/supabase/cli/releases/download/v1.170.3/supabase_1.170.3_linux_amd64.tar.gz \
+            | tar -xz && sudo mv supabase /usr/local/bin/supabase
+          supabase --version
+
+      - name: Supabase login
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Link project
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push migrations (to Supabase)
+        run: supabase db push
